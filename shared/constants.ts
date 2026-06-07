@@ -1,6 +1,7 @@
 export const FIXED_DT = 1 / 60
 export const MAX_ACCUMULATED_TIME = 0.18
-export const SBOX_TO_WEB_SPEED = 1 / 100
+export const SBOX_TO_WEB_DISTANCE = 1 / 100
+export const SBOX_TO_WEB_SPEED = SBOX_TO_WEB_DISTANCE
 
 export type ShipProfileId = 'balanced' | 'swift' | 'heavy'
 
@@ -10,6 +11,7 @@ export type ShipProfile = {
   description: string
   color: string
   acceleration: number
+  reverseAcceleration: number
   maxSpeed: number
   boostSpeed: number
   drag: number
@@ -39,8 +41,10 @@ export type ShipProfile = {
 }
 
 const scaled = (value: number) => value * SBOX_TO_WEB_SPEED
+const distanceScaled = (value: number) => value * SBOX_TO_WEB_DISTANCE
 
 const common = {
+  reverseAcceleration: scaled(860),
   airbrakeTurnBoost: 1.86,
   boostRampUpRate: 12,
   boostRampDownRate: 4.4,
@@ -149,6 +153,7 @@ export const RACE = {
   warmupSeconds: 0.45,
   countdownSeconds: 3,
   resultsDelaySeconds: 2.25,
+  toastSeconds: 1.45,
   totalLaps: 3,
   gateCount: 8,
   rivalPassPowerReward: 0.08,
@@ -171,13 +176,36 @@ export const SLIPSTREAM = {
   minEmitSpeed: scaled(1800),
   emitInterval: 0.14,
   lifetime: 5.6,
-  halfLength: scaled(1220),
-  halfWidth: scaled(255),
+  halfLength: distanceScaled(1220),
+  halfWidth: distanceScaled(255),
   acceleration: scaled(4600),
   lanePull: scaled(180),
   stackCap: 0.95,
   nearMaxFadeStart: 0.9,
   maxSegments: 512,
+}
+
+export const BANKED_CONTROL = {
+  maxBankDegrees: 62,
+  steerAssist: 0.2,
+  gripAssist: 0.35,
+  airbrakeGripAssist: 1.2,
+}
+
+export const PACK_CONTACT = {
+  proximityRadius: distanceScaled(285),
+  proximityRepelForce: scaled(600),
+  proximitySlowdown: 0.08,
+  bumpRadius: distanceScaled(162),
+  bumpForce: scaled(1480),
+  bumpReboundForce: scaled(330),
+  bumpDeflection: 0.54,
+  bumpNoseDeflection: 0.34,
+  bumpNoseSpeedLoss: 0.18,
+  bumpSpeedLoss: 0.56,
+  bumpSideRetentionBonus: 0.035,
+  bumpMinRetention: 0.92,
+  bumpPowerDamage: 0.014,
 }
 
 export const LAUNCH = {
@@ -189,9 +217,42 @@ export const LAUNCH = {
 export const TRACK_LIMITS = {
   railPadding: 3.4,
   shipHalfWidth: 1.15,
+  autoResetOffsetMultiplier: 1.45,
+  wrongWayDelay: 0.65,
+  wrongWayDotThreshold: -0.28,
+  wrongWayMinSpeed: scaled(420),
   railDamageInterval: 0.18,
   heavyHitSpeedThreshold: scaled(620),
   glanceHitSpeedThreshold: scaled(460),
   offTrackDragMultiplier: 2.4,
+  contactDragMultiplier: 1.16,
+  railSlideTangentRetention: 0.985,
+  railReleaseMinSpeed: scaled(155),
+  railReleasePressureSpeed: scaled(330),
+  railReleaseContactFloor: 0.18,
+  railSlideYawSharpness: 28,
+  railSlidePinnedYawSharpness: 110,
+  railSlidePinnedSeconds: 0.14,
+  railSlideContactGraceSeconds: 0.34,
+  railSlideHeadingMemorySeconds: 0.46,
+  railSlideHoldDecaySeconds: 0.32,
+  railSlideForwardMinimumScale: 0.88,
+  railSlidePinnedForwardMinimumScale: 1.02,
+  railSlidePinnedReleaseSpeed: scaled(1040),
+  railSlideMaxExtraOutwardSpeed: scaled(520),
+  cornerDriftForce: 0.012,
+  cornerDriftMinSpeedRatio: 0.18,
+  bankedCornerDriftRelief: 0.72,
+  airbrakeCornerDriftRelief: 0.22,
+  laneCenteringForce: 0.24,
+  airbrakeLaneCenteringScale: 0.18,
 }
 
+export const HOVER = {
+  height: distanceScaled(105),
+  bankedExtraHeight: distanceScaled(34),
+  bankedMaxBankDegrees: 62,
+  slopeExtraHeight: distanceScaled(24),
+  slopeMaxVertical: 0.34,
+  speedExtraHeight: distanceScaled(18),
+}

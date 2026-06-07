@@ -1,13 +1,29 @@
 import {
+  BANKED_CONTROL,
   CRASH_OUT,
+  HOVER,
   LAUNCH,
   PADS,
   POWER,
   SHIP_PROFILES,
+  SLIPSTREAM,
   TRACK_LIMITS,
   type ShipProfileId,
 } from './constants'
-import { approach, clamp, cross, expDecay, saturate, signedWrappedDelta, wrapDistance } from './math'
+import {
+  add3,
+  approach,
+  clamp,
+  cross,
+  distanceAlongForward,
+  dot3,
+  expDecay,
+  normalize3,
+  saturate,
+  scale3,
+  signedWrappedDelta,
+  wrapDistance,
+} from './math'
 import type { PadTrigger } from './pads'
 import type { SlipstreamSample } from './slipstream'
 import type { RaceTrack } from './track'
@@ -24,7 +40,11 @@ export type VehicleTelemetry = {
   speedRatio: number
   powerCritical: boolean
   offTrack: boolean
+  wrongWay: boolean
   railPressure: number
+  railPinnedRatio: number
+  trackLimitRatio: number
+  hoverClearance: number
   cleanLineQuality: number
   airbrakeExitCharge: number
 }
@@ -41,6 +61,8 @@ export type Vehicle = {
   forwardSpeed: number
   lateralSpeed: number
   yawOffset: number
+  visualBank: number
+  visualPitch: number
   power: number
   boostIntensity: number
   isBoosting: boolean
@@ -50,10 +72,14 @@ export type Vehicle = {
   airbrakeExitCooldown: number
   lastAirbrakeExitStrength: number
   lap: number
+  lapStartedAt: number
+  lastLapSeconds: number
+  bestLapSeconds: number
   nextGateIndex: number
   lastGateIndex: number
   lastGateDistance: number
   finished: boolean
+  finalPosition: number
   finishTime: number
   timePenalty: number
   crashOutCount: number
@@ -61,6 +87,10 @@ export type Vehicle = {
   crashOutGraceRemaining: number
   crashOutLaunchRemaining: number
   railDamageCooldown: number
+  railContactHoldSeconds: number
+  railContactMemorySeconds: number
+  railContactSide: number
+  wrongWaySeconds: number
   launchBoostCharge: number
   launchThrottlePressedAt: number
   launchThrottleWasHeld: boolean
@@ -70,6 +100,7 @@ export type Vehicle = {
   airbrakeExitPulse: number
   slipstreamPulse: number
   crashOutPulse: number
+  packBumpPulse: number
   powerDamagePulse: number
   cleanLinePulse: number
   gatePulse: number
@@ -105,6 +136,8 @@ export const createVehicle = (
   forwardSpeed: 0,
   lateralSpeed: 0,
   yawOffset: 0,
+  visualBank: 0,
+  visualPitch: 0,
   power: 1,
   boostIntensity: 0,
   isBoosting: false,
@@ -114,10 +147,14 @@ export const createVehicle = (
   airbrakeExitCooldown: 999,
   lastAirbrakeExitStrength: 0,
   lap: 1,
+  lapStartedAt: 0,
+  lastLapSeconds: -1,
+  bestLapSeconds: -1,
   nextGateIndex: 1,
   lastGateIndex: 0,
   lastGateDistance: 0,
   finished: false,
+  finalPosition: 0,
   finishTime: -1,
   timePenalty: 0,
   crashOutCount: 0,
@@ -125,6 +162,10 @@ export const createVehicle = (
   crashOutGraceRemaining: 0,
   crashOutLaunchRemaining: 0,
   railDamageCooldown: 0,
+  railContactHoldSeconds: 0,
+  railContactMemorySeconds: 0,
+  railContactSide: 0,
+  wrongWaySeconds: 0,
   launchBoostCharge: 0,
   launchThrottlePressedAt: -1,
   launchThrottleWasHeld: false,
@@ -134,6 +175,7 @@ export const createVehicle = (
   airbrakeExitPulse: 0,
   slipstreamPulse: 0,
   crashOutPulse: 0,
+  packBumpPulse: 0,
   powerDamagePulse: 0,
   cleanLinePulse: 0,
   gatePulse: 0,
@@ -143,7 +185,11 @@ export const createVehicle = (
     speedRatio: 0,
     powerCritical: false,
     offTrack: false,
+    wrongWay: false,
     railPressure: 0,
+    railPinnedRatio: 0,
+    trackLimitRatio: 0,
+    hoverClearance: HOVER.height,
     cleanLineQuality: 0,
     airbrakeExitCharge: 0,
   },
@@ -166,6 +212,16 @@ export const calculateAirbrakeExitStrength = (
   const slipRatio = saturate(Math.abs(lateralSlip) / Math.max(1, profile.airbrakeExitSlipForFullBoost))
   const steerRatio = clamp(Math.abs(steer), 0.65, 1)
   return clamp((0.45 + holdRatio * 0.35 + slipRatio * 0.2) * steerRatio, 0.42, 1)
+}
+
+const trackLimitPreview = (track: RaceTrack, vehicle: Vehicle): { offTrack: boolean; railPressure: number } => {
+  const profile = track.sample(vehicle.distance)
+  const railLimit = profile.width * 0.5 - TRACK_LIMITS.shipHalfWidth
+  const overLimit = Math.abs(vehicle.lane) - railLimit
+  return {
+    offTrack: overLimit > 0,
+    railPressure: saturate(overLimit / Math.max(0.001, TRACK_LIMITS.railPadding)),
+  }
 }
 
 export const calculateAirbrakeExitCharge = (
@@ -244,6 +300,8 @@ export const crashOut = (vehicle: Vehicle): void => {
   vehicle.boostIntensity = 0
   vehicle.forwardSpeed = 0
   vehicle.lateralSpeed = 0
+  vehicle.visualBank = 0
+  vehicle.visualPitch = 0
   vehicle.distance = vehicle.lastGateDistance
   vehicle.lane = 0
   vehicle.power = CRASH_OUT.restorePower
@@ -253,6 +311,12 @@ export const crashOut = (vehicle: Vehicle): void => {
   vehicle.crashOutGraceRemaining = CRASH_OUT.lockSeconds + CRASH_OUT.graceSeconds
   vehicle.crashOutLaunchRemaining = CRASH_OUT.respawnBoostSeconds
   vehicle.crashOutPulse = 1
+  vehicle.packBumpPulse = 0
+  vehicle.wrongWaySeconds = 0
+  vehicle.railContactHoldSeconds = 0
+  vehicle.railContactMemorySeconds = 0
+  vehicle.railContactSide = 0
+  vehicle.telemetry.wrongWay = false
 }
 
 export const resetToLastGate = (vehicle: Vehicle): void => {
@@ -260,7 +324,19 @@ export const resetToLastGate = (vehicle: Vehicle): void => {
   vehicle.lane = 0
   vehicle.forwardSpeed = Math.max(vehicle.forwardSpeed * 0.35, CRASH_OUT.respawnSpeed)
   vehicle.lateralSpeed = 0
+  vehicle.yawOffset = 0
+  vehicle.visualBank = 0
+  vehicle.visualPitch = 0
+  vehicle.wrongWaySeconds = 0
+  vehicle.railContactHoldSeconds = 0
+  vehicle.railContactMemorySeconds = 0
+  vehicle.railContactSide = 0
   vehicle.crashOutGraceRemaining = Math.max(vehicle.crashOutGraceRemaining, 0.6)
+  vehicle.telemetry.wrongWay = false
+  vehicle.telemetry.offTrack = false
+  vehicle.telemetry.railPressure = 0
+  vehicle.telemetry.railPinnedRatio = 0
+  vehicle.telemetry.trackLimitRatio = 0
 }
 
 export const applyPadTrigger = (vehicle: Vehicle, trigger: PadTrigger): void => {
@@ -288,6 +364,61 @@ const cleanLineQuality = (track: RaceTrack, vehicle: Vehicle, throttle: number):
   return saturate((1 - laneError / tolerance) * turnIntensity * (1 - vehicle.telemetry.railPressure))
 }
 
+const bankedControlRatioFor = (bankDegrees: number): number =>
+  saturate(Math.abs(bankDegrees) / Math.max(1, BANKED_CONTROL.maxBankDegrees))
+
+const railPinnedRatioFor = (vehicle: Vehicle): number =>
+  saturate(vehicle.railContactHoldSeconds / Math.max(0.01, TRACK_LIMITS.railSlidePinnedSeconds))
+
+const updateRailContactHold = (vehicle: Vehicle, side: number, dt: number): number => {
+  const recent = vehicle.railContactMemorySeconds > 0
+  const sameRail = side !== 0 && side === vehicle.railContactSide && recent
+  vehicle.railContactHoldSeconds = sameRail
+    ? Math.min(TRACK_LIMITS.railSlidePinnedSeconds * 2, Math.max(vehicle.railContactHoldSeconds, dt) + dt)
+    : dt
+  vehicle.railContactSide = side
+  vehicle.railContactMemorySeconds = TRACK_LIMITS.railSlideHeadingMemorySeconds
+  return railPinnedRatioFor(vehicle)
+}
+
+const decayRailContactHold = (vehicle: Vehicle, dt: number): void => {
+  vehicle.railContactMemorySeconds = Math.max(0, vehicle.railContactMemorySeconds - dt)
+  if (vehicle.railContactMemorySeconds > TRACK_LIMITS.railSlideHeadingMemorySeconds - TRACK_LIMITS.railSlideContactGraceSeconds) {
+    return
+  }
+  if (vehicle.railContactHoldSeconds <= 0) return
+  const decay = (TRACK_LIMITS.railSlidePinnedSeconds / Math.max(0.01, TRACK_LIMITS.railSlideHoldDecaySeconds)) * dt
+  vehicle.railContactHoldSeconds = Math.max(0, vehicle.railContactHoldSeconds - decay)
+  if (vehicle.railContactHoldSeconds <= 0 && vehicle.railContactMemorySeconds <= 0) vehicle.railContactSide = 0
+}
+
+const slopeHoverBonus = (track: RaceTrack, distance: number): number => {
+  const profile = track.sample(distance)
+  const vertical = Math.abs(profile.tangent.y)
+  return HOVER.slopeExtraHeight * saturate(vertical / Math.max(0.01, HOVER.slopeMaxVertical))
+}
+
+const updateWrongWay = (vehicle: Vehicle, dt: number): void => {
+  const speed = Math.abs(vehicle.forwardSpeed)
+  const directionDot = (vehicle.forwardSpeed >= 0 ? 1 : -1) * Math.cos(vehicle.yawOffset)
+  if (speed < TRACK_LIMITS.wrongWayMinSpeed) {
+    vehicle.wrongWaySeconds = 0
+    vehicle.telemetry.wrongWay = false
+    return
+  }
+  const wrongWay = directionDot < TRACK_LIMITS.wrongWayDotThreshold
+  vehicle.wrongWaySeconds = wrongWay ? vehicle.wrongWaySeconds + dt : 0
+  vehicle.telemetry.wrongWay = vehicle.wrongWaySeconds >= TRACK_LIMITS.wrongWayDelay
+}
+
+const clampYawOffset = (yawOffset: number): number => clamp(yawOffset, -1.28, 1.28)
+
+const yawOffsetForHeading = (
+  tangent: { x: number; y: number; z: number },
+  right: { x: number; y: number; z: number },
+  heading: { x: number; y: number; z: number },
+): number => clampYawOffset(Math.atan2(dot3(heading, right), dot3(heading, tangent)))
+
 export type StepVehicleContext = {
   track: RaceTrack
   input: VehicleInput
@@ -310,6 +441,7 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
   vehicle.airbrakeExitPulse = decayPulse(vehicle.airbrakeExitPulse, dt, 0.62)
   vehicle.slipstreamPulse = decayPulse(vehicle.slipstreamPulse, dt, 0.55)
   vehicle.crashOutPulse = decayPulse(vehicle.crashOutPulse, dt, 1.45)
+  vehicle.packBumpPulse = decayPulse(vehicle.packBumpPulse, dt, 0.4)
   vehicle.powerDamagePulse = decayPulse(vehicle.powerDamagePulse, dt, 0.55)
   vehicle.cleanLinePulse = decayPulse(vehicle.cleanLinePulse, dt, 0.45)
   vehicle.gatePulse = decayPulse(vehicle.gatePulse, dt, 0.45)
@@ -318,6 +450,7 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
   vehicle.airbrakeExitCooldown += dt
   vehicle.railDamageCooldown = Math.max(0, vehicle.railDamageCooldown - dt)
   vehicle.crashOutGraceRemaining = Math.max(0, vehicle.crashOutGraceRemaining - dt)
+  decayRailContactHold(vehicle, dt)
 
   if (input.reset) {
     resetToLastGate(vehicle)
@@ -325,12 +458,15 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
   }
 
   if (vehicle.finished) {
-    vehicle.telemetry.speedRatio = vehicle.forwardSpeed / Math.max(1, profile.boostSpeed)
+    vehicle.telemetry.speedRatio = Math.abs(vehicle.forwardSpeed) / Math.max(1, profile.boostSpeed)
     return
   }
 
   if (vehicle.crashOutLockRemaining > 0) {
     vehicle.crashOutLockRemaining = Math.max(0, vehicle.crashOutLockRemaining - dt)
+    vehicle.visualBank = approach(vehicle.visualBank, 0, 9, dt)
+    vehicle.visualPitch = approach(vehicle.visualPitch, 0, 9, dt)
+    vehicle.telemetry.wrongWay = false
     vehicle.telemetry.airbrakeExitCharge = calculateAirbrakeExitCharge(vehicle, input)
     return
   }
@@ -340,6 +476,10 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
     vehicle.forwardSpeed += profile.acceleration * 0.24 * dt
     vehicle.crashOutLaunchRemaining = Math.max(0, vehicle.crashOutLaunchRemaining - dt)
   }
+
+  const limitPreview = trackLimitPreview(track, vehicle)
+  const currentRailPressure = Math.max(vehicle.telemetry.railPressure, limitPreview.railPressure)
+  const currentlyOffTrack = vehicle.telemetry.offTrack || limitPreview.offTrack
 
   const wasAirbraking = vehicle.isAirbraking
   const wasBoosting = vehicle.isBoosting
@@ -362,7 +502,7 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
 
   if (vehicle.isBoosting) {
     const risk =
-      1 + Math.abs(steer) * profile.boostRiskDrainScale + vehicle.telemetry.railPressure * 0.28 + (nearbyVehicles > 0 ? 0.12 : 0)
+      1 + Math.abs(steer) * profile.boostRiskDrainScale + currentRailPressure * 0.48 + (nearbyVehicles > 0 ? 0.12 : 0)
     vehicle.power = saturate(vehicle.power - profile.boostDrainRate * risk * dt)
     if (vehicle.power <= profile.boostContinueThreshold) {
       vehicle.power = 0
@@ -371,7 +511,7 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
     }
   } else {
     let regen = throttle > 0.1 ? POWER.regenThrottle : POWER.regenCoast
-    if (vehicle.telemetry.offTrack && vehicle.telemetry.railPressure <= 0.05) {
+    if (currentlyOffTrack && currentRailPressure <= 0.05) {
       regen *= POWER.offTrackRegenMultiplier
     }
     vehicle.power = saturate(vehicle.power + regen * dt)
@@ -381,12 +521,16 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
     const heldSeconds = vehicle.airbrakeHoldSeconds
     vehicle.airbrakeHoldSeconds = 0
     vehicle.lastAirbrakeExitStrength = 0
+    const exitHasDriftIntent =
+      Math.abs(steer) >= 0.22 ||
+      Math.abs(vehicle.lateralSpeed) >= profile.airbrakeExitSlipForFullBoost * 0.16
     const canExitBoost =
       heldSeconds >= profile.airbrakeExitMinSeconds &&
       throttle > 0.15 &&
+      exitHasDriftIntent &&
       vehicle.power > profile.airbrakeExitPowerCost * 0.65 &&
-      !vehicle.telemetry.offTrack &&
-      vehicle.telemetry.railPressure <= 0.05 &&
+      !currentlyOffTrack &&
+      currentRailPressure <= 0.05 &&
       vehicle.airbrakeExitCooldown >= profile.airbrakeExitCooldown
     if (canExitBoost) {
       const strength = calculateAirbrakeExitStrength(heldSeconds, steer, vehicle.lateralSpeed, vehicle.profileId)
@@ -400,60 +544,148 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
     vehicle.airbrakeHoldSeconds = 0
   }
 
+  const profileNow = track.sample(vehicle.distance)
+  const bankedControlRatio = bankedControlRatioFor(profileNow.bankDegrees)
   const yawScale = 1.08 - saturate(vehicle.telemetry.speedRatio) * 0.24
   const airbrakeTurn = vehicle.isAirbraking ? profile.airbrakeTurnBoost : 1
-  vehicle.yawOffset = clamp(
-    vehicle.yawOffset + steer * profile.turnRate * yawScale * airbrakeTurn * dt,
-    -0.95,
-    0.95,
+  const bankedSteer = 1 + bankedControlRatio * BANKED_CONTROL.steerAssist
+  vehicle.yawOffset = clampYawOffset(
+    vehicle.yawOffset + steer * profile.turnRate * yawScale * airbrakeTurn * bankedSteer * dt,
   )
-  vehicle.yawOffset = expDecay(vehicle.yawOffset, vehicle.isAirbraking ? 1.7 : 3.4, dt)
 
-  if (throttle > 0) vehicle.forwardSpeed += profile.acceleration * throttle * dt
-  if (throttle < 0) vehicle.forwardSpeed += profile.acceleration * 0.14 * throttle * dt
+  const heading = normalize3(
+    add3(scale3(profileNow.tangent, Math.cos(vehicle.yawOffset)), scale3(profileNow.right, Math.sin(vehicle.yawOffset))),
+    profileNow.tangent,
+  )
+  const headingRight = normalize3(
+    add3(scale3(profileNow.right, Math.cos(vehicle.yawOffset)), scale3(profileNow.tangent, -Math.sin(vehicle.yawOffset))),
+    profileNow.right,
+  )
+
+  let velocity = add3(scale3(profileNow.tangent, vehicle.forwardSpeed), scale3(profileNow.right, vehicle.lateralSpeed))
+  if (throttle > 0) velocity = add3(velocity, scale3(heading, profile.acceleration * throttle * dt))
+  if (throttle < 0) velocity = add3(velocity, scale3(heading, profile.reverseAcceleration * throttle * dt))
   if (vehicle.boostIntensity > 0) {
-    vehicle.forwardSpeed += profile.acceleration * profile.boostSustainAccelerationScale * vehicle.boostIntensity * dt
+    velocity = add3(velocity, scale3(heading, profile.acceleration * profile.boostSustainAccelerationScale * vehicle.boostIntensity * dt))
   }
   if (vehicle.speedPadPulse > 0) {
-    vehicle.forwardSpeed += PADS.speedPadSustainAcceleration * vehicle.speedPadPulse * dt
+    velocity = add3(velocity, scale3(heading, PADS.speedPadSustainAcceleration * vehicle.speedPadPulse * dt))
   }
   if (slipstream.strength > 0) {
-    vehicle.forwardSpeed += slipstream.accelerationBonus * dt
-    vehicle.lateralSpeed -= slipstream.lanePull * 1.8 * dt
-    vehicle.slipstreamPulse = Math.max(vehicle.slipstreamPulse, slipstream.strength)
+    const maxRatio = vehicle.forwardSpeed / Math.max(1, profile.maxSpeed)
+    const fadeWindow = Math.max(0.01, 1 - SLIPSTREAM.nearMaxFadeStart)
+    const belowMaxRatio = saturate((1 - maxRatio) / fadeWindow)
+    const effectiveStrength = slipstream.strength * belowMaxRatio
+    if (effectiveStrength > 0) {
+      const forwardImpulse = Math.min(slipstream.accelerationBonus * belowMaxRatio * dt, Math.max(0, profile.maxSpeed - vehicle.forwardSpeed))
+      velocity = add3(velocity, scale3(heading, forwardImpulse))
+      velocity = add3(velocity, scale3(profileNow.right, -slipstream.lanePull * SLIPSTREAM.lanePull * effectiveStrength * dt))
+      vehicle.slipstreamPulse = Math.max(vehicle.slipstreamPulse, slipstream.strength)
+    }
   }
 
-  vehicle.lateralSpeed += steer * profile.strafeForce * (vehicle.isAirbraking ? 1.48 : 1) * dt
-  const grip = vehicle.isAirbraking ? profile.driftGrip : profile.lateralGrip * (1 + saturate(vehicle.telemetry.speedRatio) * 0.18)
-  vehicle.lateralSpeed = expDecay(vehicle.lateralSpeed, grip, dt)
+  velocity = add3(velocity, scale3(headingRight, steer * profile.strafeForce * (vehicle.isAirbraking ? 1.48 : 1) * dt))
+  const curveLookahead = Math.max(8.4, profileNow.width * 0.54)
+  const curveAhead = track.sample(vehicle.distance + curveLookahead)
+  const curve = cross(
+    { x: profileNow.tangent.x, y: profileNow.tangent.z },
+    { x: curveAhead.tangent.x, y: curveAhead.tangent.z },
+  )
+  const cornerSpeedRatio = saturate(
+    (Math.abs(vehicle.forwardSpeed) / Math.max(1, profile.maxSpeed) - TRACK_LIMITS.cornerDriftMinSpeedRatio) /
+      Math.max(0.01, 1 - TRACK_LIMITS.cornerDriftMinSpeedRatio),
+  )
+  const cornerRelief =
+    1 -
+    bankedControlRatio * TRACK_LIMITS.bankedCornerDriftRelief -
+    (vehicle.isAirbraking ? TRACK_LIMITS.airbrakeCornerDriftRelief : 0)
+  const curveForce =
+    curve *
+    Math.abs(vehicle.forwardSpeed) *
+    Math.abs(vehicle.forwardSpeed) *
+    TRACK_LIMITS.cornerDriftForce *
+    cornerSpeedRatio *
+    Math.max(0.28, cornerRelief) *
+    dt
+  const laneCenteringScale = vehicle.isAirbraking ? TRACK_LIMITS.airbrakeLaneCenteringScale : 1
+  const centeringForce = -vehicle.lane * TRACK_LIMITS.laneCenteringForce * laneCenteringScale * dt
+  velocity = add3(velocity, scale3(profileNow.right, curveForce + centeringForce))
+  const movingGrip = profile.lateralGrip * (1 + saturate(vehicle.telemetry.speedRatio) * 0.18 + bankedControlRatio * BANKED_CONTROL.gripAssist)
+  const bankedDriftGrip = profile.lateralGrip * 0.78 * (1 + bankedControlRatio * 0.18)
+  const driftBlend = saturate(bankedControlRatio * BANKED_CONTROL.airbrakeGripAssist)
+  const grip = vehicle.isAirbraking ? profile.driftGrip + (bankedDriftGrip - profile.driftGrip) * driftBlend : movingGrip
+  let headingForwardSpeed = dot3(velocity, heading)
+  let headingSideSpeed = dot3(velocity, headingRight)
+  headingSideSpeed = expDecay(headingSideSpeed, grip, dt)
 
   let drag = profile.drag
   if (vehicle.isAirbraking) drag *= Math.abs(steer) > 0.2 ? 1.72 : 3.05
   if (vehicle.telemetry.offTrack) drag *= TRACK_LIMITS.offTrackDragMultiplier
-  vehicle.forwardSpeed = expDecay(vehicle.forwardSpeed, drag, dt)
-  vehicle.forwardSpeed = Math.max(0, vehicle.forwardSpeed)
+  headingForwardSpeed = expDecay(headingForwardSpeed, drag, dt)
+  headingSideSpeed = expDecay(headingSideSpeed, drag, dt)
+  velocity = add3(scale3(heading, headingForwardSpeed), scale3(headingRight, headingSideSpeed))
 
-  const profileNow = track.sample(vehicle.distance)
-  const yawForwardScale = Math.max(0.35, Math.cos(vehicle.yawOffset))
-  vehicle.distance = wrapDistance(vehicle.distance + vehicle.forwardSpeed * yawForwardScale * dt, track.totalLength)
-  vehicle.lane += (vehicle.lateralSpeed + Math.sin(vehicle.yawOffset) * vehicle.forwardSpeed * 0.28) * dt
+  const targetMax =
+    profile.maxSpeed +
+    (profile.boostSpeed - profile.maxSpeed) * saturate(vehicle.boostIntensity) +
+    profile.airbrakeExitSpeedBonus * vehicle.airbrakeExitPulse +
+    PADS.speedPadSpeedBonus * vehicle.speedPadPulse +
+    CRASH_OUT.respawnBoostSpeedBonus * (vehicle.crashOutLaunchRemaining / CRASH_OUT.respawnBoostSeconds)
+  const trackForwardSpeed = dot3(velocity, profileNow.tangent)
+  const trackLateralSpeed = dot3(velocity, profileNow.right)
+  const planarSpeed = Math.hypot(trackForwardSpeed, trackLateralSpeed)
+  const maxPlanarSpeed = Math.max(profile.maxSpeed, targetMax)
+  const speedScale = planarSpeed > maxPlanarSpeed ? maxPlanarSpeed / Math.max(0.0001, planarSpeed) : 1
+  vehicle.forwardSpeed = clamp(trackForwardSpeed * speedScale, -profile.reverseAcceleration * 0.68, Number.POSITIVE_INFINITY)
+  vehicle.lateralSpeed = trackLateralSpeed * speedScale
 
-  const railLimit = profileNow.width * 0.5 - TRACK_LIMITS.shipHalfWidth
+  vehicle.distance = wrapDistance(vehicle.distance + vehicle.forwardSpeed * dt, track.totalLength)
+  vehicle.lane += vehicle.lateralSpeed * dt
+
+  const activeProfile = track.sample(vehicle.distance)
+  vehicle.yawOffset = yawOffsetForHeading(activeProfile.tangent, activeProfile.right, heading)
+  if (Math.abs(vehicle.lane) > activeProfile.width * TRACK_LIMITS.autoResetOffsetMultiplier) {
+    resetToLastGate(vehicle)
+    vehicle.crashOutGraceRemaining = Math.max(vehicle.crashOutGraceRemaining, 0.6)
+    return
+  }
+
+  const railLimit = activeProfile.width * 0.5 - TRACK_LIMITS.shipHalfWidth
   const overLimit = Math.abs(vehicle.lane) - railLimit
   vehicle.telemetry.offTrack = overLimit > 0
   vehicle.telemetry.railPressure = saturate(overLimit / Math.max(0.001, TRACK_LIMITS.railPadding))
+  vehicle.telemetry.trackLimitRatio = saturate(Math.abs(vehicle.lane) / Math.max(1, activeProfile.width * 0.5))
   if (vehicle.telemetry.offTrack) {
+    const side = Math.sign(vehicle.lane) || 1
+    const pinnedRatio = updateRailContactHold(vehicle, side, dt)
+    const outwardSpeed = Math.max(0, vehicle.lateralSpeed * side)
     vehicle.lane = clamp(vehicle.lane, -railLimit, railLimit)
-    vehicle.lateralSpeed *= -0.22
-    const hardHit = vehicle.forwardSpeed > TRACK_LIMITS.heavyHitSpeedThreshold
-    const retention = hardHit ? profile.railHeavyHitRetention : profile.railGlanceRetention
-    vehicle.forwardSpeed *= retention
+    const releasePressure = Math.max(vehicle.telemetry.railPressure, TRACK_LIMITS.railReleaseContactFloor)
+    const releaseSpeed = TRACK_LIMITS.railReleaseMinSpeed +
+      TRACK_LIMITS.railReleasePressureSpeed * releasePressure +
+      TRACK_LIMITS.railSlidePinnedReleaseSpeed * pinnedRatio
+    const currentNormalSpeed = Math.max(0, -vehicle.lateralSpeed * side)
+    const normalSpeed = clamp(
+      Math.max(currentNormalSpeed, releaseSpeed),
+      releaseSpeed,
+      releaseSpeed + TRACK_LIMITS.railSlideMaxExtraOutwardSpeed,
+    )
+    vehicle.lateralSpeed = -side * normalSpeed
+    const slideLoss = (1 - TRACK_LIMITS.railSlideTangentRetention) * vehicle.telemetry.railPressure
+    vehicle.forwardSpeed *= Math.max(0.82, 1 - slideLoss)
+    const yawSharpness = TRACK_LIMITS.railSlideYawSharpness +
+      (TRACK_LIMITS.railSlidePinnedYawSharpness - TRACK_LIMITS.railSlideYawSharpness) * pinnedRatio
+    vehicle.yawOffset = approach(vehicle.yawOffset, 0, yawSharpness, dt)
     if (vehicle.railDamageCooldown <= 0) {
+      const hardHit = vehicle.forwardSpeed > TRACK_LIMITS.heavyHitSpeedThreshold && outwardSpeed > TRACK_LIMITS.glanceHitSpeedThreshold
+      const retention = hardHit ? profile.railHeavyHitRetention : profile.railGlanceRetention
+      vehicle.forwardSpeed *= retention
       const speedSeverity = saturate(vehicle.forwardSpeed / Math.max(1, profile.boostSpeed))
       applyPowerDamage(vehicle, profile.railPowerDamage + profile.railSpeedDamage * speedSeverity)
       vehicle.railDamageCooldown = TRACK_LIMITS.railDamageInterval
     }
   }
+  vehicle.telemetry.railPinnedRatio = railPinnedRatioFor(vehicle)
 
   const clean = cleanLineQuality(track, vehicle, throttle)
   vehicle.telemetry.cleanLineQuality = approach(vehicle.telemetry.cleanLineQuality, clean, 6.4, dt)
@@ -466,23 +698,32 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
     vehicle.cleanLinePulse = Math.max(vehicle.cleanLinePulse, vehicle.telemetry.cleanLineQuality)
   }
 
-  const targetMax =
-    profile.maxSpeed +
-    (profile.boostSpeed - profile.maxSpeed) * saturate(vehicle.boostIntensity) +
-    profile.airbrakeExitSpeedBonus * vehicle.airbrakeExitPulse +
-    PADS.speedPadSpeedBonus * vehicle.speedPadPulse +
-    CRASH_OUT.respawnBoostSpeedBonus * (vehicle.crashOutLaunchRemaining / CRASH_OUT.respawnBoostSeconds)
-  vehicle.forwardSpeed = Math.min(vehicle.forwardSpeed, Math.max(profile.maxSpeed, targetMax))
-
-  vehicle.telemetry.speedRatio = vehicle.forwardSpeed / Math.max(1, profile.boostSpeed)
+  updateWrongWay(vehicle, dt)
+  const bankRatio = saturate(Math.abs(activeProfile.bankDegrees) / Math.max(1, HOVER.bankedMaxBankDegrees))
+  vehicle.telemetry.hoverClearance =
+    HOVER.height +
+    bankRatio * HOVER.bankedExtraHeight +
+    slopeHoverBonus(track, vehicle.distance) +
+    saturate(Math.abs(vehicle.forwardSpeed) / Math.max(1, profile.boostSpeed)) * HOVER.speedExtraHeight
+  const impactBank = vehicle.packBumpPulse * 0.18 * Math.sign(vehicle.lane || 1) + vehicle.powerDamagePulse * 0.12 * Math.sign(vehicle.lane || 1)
+  const targetBank =
+    -steer * (vehicle.isAirbraking ? 42 : 31) * (Math.PI / 180) +
+    vehicle.lateralSpeed * 1.2 * (Math.PI / 180) +
+    impactBank
+  const targetPitch =
+    (-throttle * 5 - saturate(Math.abs(vehicle.forwardSpeed) / Math.max(1, profile.boostSpeed)) * 3 + vehicle.boostIntensity * -4) *
+    (Math.PI / 180)
+  vehicle.visualBank = approach(vehicle.visualBank, clamp(targetBank, -48 * Math.PI / 180, 48 * Math.PI / 180), 8, dt)
+  vehicle.visualPitch = approach(vehicle.visualPitch, clamp(targetPitch, -12 * Math.PI / 180, 11 * Math.PI / 180), 8, dt)
+  vehicle.telemetry.speedRatio = Math.abs(vehicle.forwardSpeed) / Math.max(1, profile.boostSpeed)
   vehicle.telemetry.powerCritical = vehicle.power <= POWER.criticalThreshold
   vehicle.telemetry.airbrakeExitCharge = calculateAirbrakeExitCharge(vehicle, input)
 }
 
-export const markGatePassed = (vehicle: Vehicle, gateIndex: number, gateDistance: number): void => {
+export const markGatePassed = (vehicle: Vehicle, gateIndex: number, gateDistance: number, gateCount = 8): void => {
   vehicle.lastGateIndex = gateIndex
   vehicle.lastGateDistance = gateDistance
-  vehicle.nextGateIndex = (gateIndex + 1) % 8
+  vehicle.nextGateIndex = (gateIndex + 1) % Math.max(1, gateCount)
   vehicle.gatePulse = 1
   if (gateIndex === 0) vehicle.lapPulse = 1
 }
@@ -497,6 +738,9 @@ export const hasCrossedGate = (
   const previous = signedWrappedDelta(gate.distance, vehicle.previousDistance, track.totalLength)
   const current = signedWrappedDelta(gate.distance, vehicle.distance, track.totalLength)
   const crossedForward = previous < 0 && current >= 0
-  return crossedForward && Math.abs(vehicle.lane) <= gate.halfWidth
+  const travelled = Math.max(0.0001, distanceAlongForward(vehicle.previousDistance, vehicle.distance, track.totalLength))
+  const gateDelta = distanceAlongForward(vehicle.previousDistance, gate.distance, track.totalLength)
+  const t = clamp(gateDelta / travelled, 0, 1)
+  const laneAtGate = vehicle.previousLane + (vehicle.lane - vehicle.previousLane) * t
+  return crossedForward && Math.abs(laneAtGate) <= gate.halfWidth
 }
-

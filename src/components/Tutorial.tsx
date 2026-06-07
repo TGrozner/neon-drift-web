@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { getPlayer, type RaceState } from '../../shared/race'
 
 type StepId =
-  | 'menu'
   | 'launch'
   | 'thrust'
   | 'airbrake'
@@ -22,7 +21,6 @@ type TutorialStep = {
 const storageKey = 'neon_drift_web.tutorial.v1.complete'
 
 const steps: TutorialStep[] = [
-  { id: 'menu', title: 'Pick a ship', body: 'Start Solo on Neon Oval. The pack is live as soon as GO hits.' },
   { id: 'launch', title: 'Launch clean', body: 'Hold throttle near the end of the countdown for launch boost.' },
   { id: 'thrust', title: 'Thrust and steer', body: 'Build speed first, then carve across the lane.' },
   { id: 'airbrake', title: 'Airbrake drift', body: 'Hold airbrake into a turn, steer, then release for exit boost.' },
@@ -35,19 +33,18 @@ const steps: TutorialStep[] = [
 
 const shouldAdvance = (step: StepId, race: RaceState): boolean => {
   const player = getPlayer(race)
-  if (step === 'menu') return race.phase !== 'menu'
   if (step === 'launch') return race.phase === 'racing' && player.forwardSpeed > 3
   if (step === 'thrust') return player.forwardSpeed > 18 && Math.abs(player.lane) > 0.8
   if (step === 'airbrake') return player.airbrakeExitPulse > 0.05 || player.telemetry.airbrakeExitCharge > 0.55
   if (step === 'boost') return player.isBoosting || player.boostStartPulse > 0.05
   if (step === 'pads') return player.speedPadPulse > 0.05 || player.rechargePadPulse > 0.05
   if (step === 'draft') return player.slipstreamPulse > 0.05 || player.rivalPassPulse > 0.05
-  if (step === 'contact') return player.powerDamagePulse > 0.05 || player.crashOutPulse > 0.05
+  if (step === 'contact') return player.packBumpPulse > 0.05 || player.powerDamagePulse > 0.05 || player.crashOutPulse > 0.05
   if (step === 'checkpoints') return player.gatePulse > 0.05 || player.lapPulse > 0.05
   return false
 }
 
-export function Tutorial({ race }: { race: RaceState }) {
+export function Tutorial({ race, raceVersion }: { race: RaceState; raceVersion: number }) {
   const initiallyComplete = useMemo(() => localStorage.getItem(storageKey) === 'true', [])
   const [index, setIndex] = useState(initiallyComplete ? steps.length : 0)
   const [acknowledged, setAcknowledged] = useState(false)
@@ -72,10 +69,12 @@ export function Tutorial({ race }: { race: RaceState }) {
 
   useEffect(() => {
     if (!current) return
-    if (!acknowledged && current.id !== 'menu') return
+    if (!acknowledged) return
     if (!shouldAdvance(current.id, race)) return
+    const stepId = current.id
     const timeout = window.setTimeout(() => {
       setIndex((value) => {
+        if (steps[value]?.id !== stepId) return value
         const next = value + 1
         if (next >= steps.length) localStorage.setItem(storageKey, 'true')
         return next
@@ -83,16 +82,16 @@ export function Tutorial({ race }: { race: RaceState }) {
       setAcknowledged(false)
     }, 0)
     return () => window.clearTimeout(timeout)
-  }, [acknowledged, current, race])
+  }, [acknowledged, current, race, raceVersion])
 
-  if (!current) return null
+  if (!current || race.phase === 'menu' || race.phase === 'finished' || race.phase === 'results') return null
 
   return (
     <div className="tutorial" data-testid="tutorial">
       <div className="tutorial-counter">{index + 1}/{steps.length}</div>
       <strong>{current.title}</strong>
       <p>{current.body}</p>
-      {current.id !== 'menu' && !acknowledged && (
+      {!acknowledged && (
         <button type="button" onClick={() => setAcknowledged(true)}>
           OK
         </button>

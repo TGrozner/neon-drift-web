@@ -17,6 +17,7 @@ export type SlipstreamSegment = {
 export type SlipstreamState = {
   segments: SlipstreamSegment[]
   lastEmitByOwner: Record<string, number>
+  lastPrunedAt: number
 }
 
 export type SlipstreamSample = {
@@ -30,10 +31,13 @@ export type SlipstreamSample = {
 export const createSlipstreamState = (): SlipstreamState => ({
   segments: [],
   lastEmitByOwner: {},
+  lastPrunedAt: Number.NEGATIVE_INFINITY,
 })
 
 export const pruneSlipstream = (state: SlipstreamState, now: number): void => {
+  if (now <= state.lastPrunedAt) return
   state.segments = state.segments.filter((segment) => now - segment.createdAt <= segment.lifetime)
+  state.lastPrunedAt = now
 }
 
 export const publishSlipstream = (
@@ -125,4 +129,3 @@ export const sampleSlipstream = (
     stackCapped,
   }
 }
-

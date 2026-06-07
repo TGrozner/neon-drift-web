@@ -20,6 +20,16 @@
   pointer-events: none;
 }
 
+.speed-vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 62%, transparent 36%, rgba(108, 232, 255, 0.12) 78%, rgba(255, 61, 242, 0.22) 100%),
+    linear-gradient(90deg, rgba(108, 232, 255, 0.08), transparent 18%, transparent 82%, rgba(255, 191, 74, 0.08));
+  mix-blend-mode: screen;
+  transition: opacity 120ms linear;
+}
+
 .hud-panel {
   position: absolute;
   border: 1px solid rgba(108, 232, 255, 0.24);
@@ -43,6 +53,10 @@
   display: grid;
   gap: 6px;
   text-align: right;
+}
+
+.mobile-race-strip {
+  display: none;
 }
 
 .standings {
@@ -208,6 +222,8 @@
 
 .menu-panel {
   width: min(560px, calc(100vw - 48px));
+  max-height: calc(100svh - 72px);
+  overflow: auto;
   border: 1px solid rgba(108, 232, 255, 0.28);
   background: rgba(5, 6, 11, 0.78);
   padding: 24px;
@@ -239,7 +255,9 @@
 }
 
 .ship-card,
-.start-button {
+.track-option,
+.start-button,
+.results-actions button {
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.06);
   color: #eef7ff;
@@ -261,9 +279,11 @@
 }
 
 .ship-card small,
-.track-card small {
+.track-card small,
+.track-option small {
   color: rgba(238, 247, 255, 0.62);
   line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .swatch {
@@ -279,10 +299,189 @@
   background: rgba(108, 232, 255, 0.06);
 }
 
+.track-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.track-option {
+  min-width: 0;
+  min-height: 88px;
+  padding: 10px;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  text-align: left;
+}
+
+.track-option strong {
+  font-size: 13px;
+  line-height: 1.08;
+}
+
+.track-option small {
+  font-size: 11px;
+}
+
+.track-option.selected {
+  border-color: #ffbf4a;
+  background: rgba(255, 191, 74, 0.12);
+}
+
+.readability {
+  left: 24px;
+  top: 190px;
+  width: 236px;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.readability-row {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.meter.line span {
+  background: linear-gradient(90deg, #ffbf4a, #5dfd7a);
+}
+
+.meter.draft-strong span {
+  background: linear-gradient(90deg, #6ce8ff, #5dfd7a);
+}
+
+.rivals {
+  right: 24px;
+  top: 178px;
+  width: 232px;
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.rival-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px 64px;
+  gap: 8px;
+  color: rgba(238, 247, 255, 0.78);
+  font-size: 12px;
+}
+
+.rival-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.race-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  pointer-events: none;
+  background: rgba(5, 6, 11, 0.18);
+}
+
+.results-panel {
+  width: min(520px, calc(100vw - 40px));
+  border: 1px solid rgba(255, 191, 74, 0.34);
+  background: rgba(3, 7, 14, 0.82);
+  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.52);
+  padding: 18px;
+  pointer-events: auto;
+}
+
+.results-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: #ffbf4a;
+  font-size: 28px;
+  font-weight: 1000;
+}
+
+.results-header strong {
+  font-size: 18px;
+  align-self: center;
+}
+
+.results-track {
+  margin: 4px 0 14px;
+  color: rgba(238, 247, 255, 0.68);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.results-wait {
+  padding: 14px 0 4px;
+  color: rgba(238, 247, 255, 0.72);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.results-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+  color: rgba(238, 247, 255, 0.82);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.results-table {
+  display: grid;
+  gap: 4px;
+}
+
+.result-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 78px 48px;
+  gap: 8px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(238, 247, 255, 0.82);
+  font-size: 13px;
+}
+
+.result-row.local {
+  color: #ffbf4a;
+  background: rgba(255, 191, 74, 0.12);
+}
+
+.result-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.results-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.results-actions button {
+  min-height: 46px;
+  font-weight: 1000;
+}
+
 .start-button {
   width: 100%;
   height: 56px;
   margin-top: 22px;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
   background: linear-gradient(90deg, #ff3df2, #ffbf4a);
   color: #05060b;
   font-weight: 1000;
@@ -332,6 +531,11 @@
   pointer-events: auto;
 }
 
+.menu-shell ~ .touch-controls,
+.race-overlay ~ .touch-controls {
+  display: none;
+}
+
 .touch-cluster.right {
   justify-content: flex-end;
 }
@@ -345,12 +549,28 @@
   color: #eef7ff;
   font-size: 17px;
   font-weight: 900;
+  touch-action: none;
+  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+
+.touch-controls button.pressed {
+  border-color: #ffbf4a;
+  background: rgba(255, 191, 74, 0.2);
+  transform: translateY(1px);
+}
+
+.touch-controls .throttle-button {
+  width: 68px;
+  border-color: rgba(108, 232, 255, 0.42);
+  background: rgba(108, 232, 255, 0.14);
 }
 
 @media (max-width: 820px) {
   .hud-speed,
   .standings,
-  .hud-race {
+  .hud-race,
+  .readability,
+  .rivals {
     transform: scale(0.86);
     transform-origin: top left;
   }
@@ -367,6 +587,11 @@
     display: none;
   }
 
+  .readability,
+  .rivals {
+    display: none;
+  }
+
   .menu-shell {
     padding: 18px;
     align-items: start;
@@ -377,13 +602,105 @@
     grid-template-columns: 1fr;
   }
 
+  .track-options {
+    grid-template-columns: 1fr;
+  }
+
+  .menu-panel {
+    width: calc(100vw - 36px);
+    max-height: calc(100svh - 36px);
+    padding: 18px;
+  }
+
+  .start-button {
+    position: static;
+  }
+
+  .results-header {
+    font-size: 22px;
+  }
+
+  .results-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .toast {
+    top: 176px;
+    font-size: 22px;
+  }
+
   .touch-controls {
     display: flex;
+    inset: auto 16px 20px;
+  }
+
+  .touch-cluster {
+    gap: 6px;
+  }
+
+  .touch-controls button {
+    width: 52px;
+    height: 54px;
+  }
+
+  .touch-controls .throttle-button {
+    width: 68px;
+  }
+
+  .mobile-race-strip {
+    position: absolute;
+    top: 24px;
+    left: 16px;
+    width: 136px;
+    display: grid;
+    gap: 5px;
+    padding: 10px;
+    border: 1px solid rgba(108, 232, 255, 0.24);
+    background: rgba(3, 7, 14, 0.62);
+    font-size: 11px;
+    font-weight: 900;
+  }
+
+  .mobile-race-strip strong {
+    color: #ffbf4a;
+    font-size: 18px;
+  }
+
+  .mobile-race-strip span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mini-bars {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    height: 5px;
+    overflow: hidden;
+  }
+
+  .mini-bars span {
+    display: block;
+    height: 100%;
+    background: #6ce8ff;
+  }
+
+  .event-strip {
+    right: 16px;
+    bottom: 128px;
+    left: auto;
+    flex-direction: column;
+    align-items: flex-end;
+    transform: none;
   }
 
   .tutorial {
-    right: 16px;
-    bottom: 164px;
+    top: 280px;
+    right: auto;
+    bottom: auto;
+    left: 16px;
+    width: min(320px, calc(100vw - 32px));
   }
 }
-

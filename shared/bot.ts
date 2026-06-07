@@ -68,12 +68,14 @@ const findPadLaneBias = (
   let bestScore = Number.POSITIVE_INFINITY
   let bestLane = 0
   let bestAhead = 0
+  const senseDistance = clamp(22 + Math.abs(vehicle.forwardSpeed) * 0.24, 25.5, 44)
 
   for (const pad of track.pads) {
     if (pad.kind === 'recharge' && vehicle.power > 0.62) continue
     const ahead = distanceAlongForward(vehicle.distance, pad.distance, track.totalLength)
-    if (ahead <= 0 || ahead > 25.5) continue
-    const score = ahead + Math.abs(pad.lane - vehicle.lane) * 0.82 + (pad.kind === 'recharge' ? 1.2 : 0)
+    if (ahead <= 0 || ahead > senseDistance) continue
+    const laneReachCost = Math.abs(pad.lane - vehicle.lane) * (ahead < 10 ? 1.45 : 0.82)
+    const score = ahead + laneReachCost + (pad.kind === 'recharge' ? 1.2 : 0)
     if (score < bestScore) {
       bestScore = score
       bestLane = pad.lane
@@ -83,7 +85,7 @@ const findPadLaneBias = (
 
   if (!Number.isFinite(bestScore)) return 0
   brain.wantsPad = true
-  const urgency = clamp(1 - bestAhead / 25.5, 0.18, 1)
+  const urgency = clamp(1 - bestAhead / senseDistance, 0.18, 1)
   return clamp(bestLane - vehicle.lane, -track.width * 0.32, track.width * 0.32) * urgency
 }
 
@@ -140,7 +142,8 @@ export const getBotInput = (
   dt: number,
 ): VehicleInput => {
   const profile = SHIP_PROFILES[vehicle.profileId]
-  const turnDegrees = turnDegreesAhead(track, vehicle.distance, 12.5)
+  const lookAhead = clamp(Math.abs(vehicle.forwardSpeed) * 0.35, 12.5, 38)
+  const turnDegrees = turnDegreesAhead(track, vehicle.distance, lookAhead)
   const clean = cleanLineBias(track, vehicle)
   brain.cleanLineBias = smooth(brain.cleanLineBias, clean.bias, 4.4, dt)
   brain.padLaneBias = smooth(brain.padLaneBias, findPadLaneBias(brain, track, vehicle), 6.4, dt)
@@ -173,4 +176,3 @@ export const getBotInput = (
     reset: false,
   }
 }
-

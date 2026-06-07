@@ -22,9 +22,9 @@ Deferred from this first cut:
 
 ## Controls
 
-- `W` / `ArrowUp`: throttle
+- `W` / `Z` / `ArrowUp`: throttle
 - `S` / `ArrowDown`: reverse/brake
-- `A` / `D` or arrows: steer
+- `A` / `Q` / `D` or arrows: steer
 - `Space`: airbrake
 - `Shift`: boost
 - `R`: reset to last checkpoint
@@ -55,4 +55,3 @@ npm run e2e
 - `e2e/`: Playwright smoke test with WebGL canvas pixel verification.
 
 See `MIGRATION_FROM_SBOX.md` and `ARCHITECTURE.md` for migration details.
-

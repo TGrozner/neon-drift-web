@@ -1,29 +1,32 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type MutableRefObject } from 'react'
 import type { RaceState } from '../../shared/race'
 import { NeonRenderer } from '../render/renderer'
 
 type Props = {
-  race: RaceState
+  raceRef: MutableRefObject<RaceState>
 }
 
-export function GameCanvas({ race }: Props) {
+export function GameCanvas({ raceRef }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const rendererRef = useRef<NeonRenderer | null>(null)
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    rendererRef.current = new NeonRenderer(canvas)
+    const renderer = new NeonRenderer(canvas)
+    rendererRef.current = renderer
+    let raf = 0
+    const render = () => {
+      renderer.update(raceRef.current)
+      raf = requestAnimationFrame(render)
+    }
+    raf = requestAnimationFrame(render)
     return () => {
-      rendererRef.current?.dispose()
+      cancelAnimationFrame(raf)
+      renderer.dispose()
       rendererRef.current = null
     }
-  }, [])
-
-  useEffect(() => {
-    rendererRef.current?.update(race)
-  })
+  }, [raceRef])
 
   return <canvas ref={canvasRef} className="game-canvas" aria-label="Neon Drift 3D race view" />
 }
-
