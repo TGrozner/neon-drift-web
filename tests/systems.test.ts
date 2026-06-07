@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createBotBrain, getBotInput } from '../shared/bot'
 import { RACE, SHIP_PROFILES, SLIPSTREAM } from '../shared/constants'
 import { cross3, dot3 } from '../shared/math'
-import { createVehicle } from '../shared/physics'
+import { EMPTY_INPUT, createVehicle } from '../shared/physics'
 import { isInsidePad, triggerTrackPads } from '../shared/pads'
 import { getPlayer, startRace, updateRace, updateRivals, updateStandings } from '../shared/race'
 import {
@@ -177,10 +177,24 @@ describe('bot ai', () => {
   it('changes lane or brakes when a slower vehicle is ahead', () => {
     const bot = createVehicle('bot', 'Bot', 'balanced', false, 40, 0)
     const ahead = createVehicle('slow', 'Slow', 'heavy', false, 46, 0)
-    ahead.forwardSpeed = 4
+    bot.forwardSpeed = SHIP_PROFILES.balanced.maxSpeed * 0.72
+    ahead.forwardSpeed = SHIP_PROFILES.heavy.maxSpeed * 0.18
     const brain = createBotBrain('bot', 0.4)
     const input = getBotInput(brain, NEON_OVAL, bot, [bot, ahead], 1 / 60)
     expect(Math.abs(input.steer) + (1 - input.throttle)).toBeGreaterThan(0.05)
+    expect(brain.trafficBrakeIntent).toBeGreaterThan(0)
+  })
+
+  it('does not brake just because a faster vehicle is ahead', () => {
+    const bot = createVehicle('bot', 'Bot', 'balanced', false, 40, 0)
+    const ahead = createVehicle('fast', 'Fast', 'swift', false, 46.2, 0)
+    bot.forwardSpeed = SHIP_PROFILES.balanced.maxSpeed * 0.32
+    ahead.forwardSpeed = SHIP_PROFILES.swift.maxSpeed * 0.58
+    const brain = createBotBrain('bot', 0.4)
+
+    getBotInput(brain, NEON_OVAL, bot, [bot, ahead], 1 / 60)
+
+    expect(brain.trafficBrakeIntent).toBe(0)
   })
 
   it('targets useful pads deterministically', () => {
@@ -253,6 +267,47 @@ describe('race flow', () => {
     expect(player.packBumpPulse).toBeGreaterThan(0)
     expect(rival.packBumpPulse).toBeGreaterThan(0)
     expect(Math.abs(rival.lane - player.lane)).toBeGreaterThan(0.2)
+  })
+
+  it('does not trigger pads by sweeping from a pre-reset position', () => {
+    const race = startRace('balanced')
+    race.phase = 'racing'
+    const player = getPlayer(race)
+    const pad = race.track.pads[0]
+    player.distance = pad.distance - pad.halfLength - 1
+    player.lane = pad.lane
+    player.lastGateDistance = pad.distance + pad.halfLength + 1
+    player.forwardSpeed = SHIP_PROFILES[player.profileId].maxSpeed
+
+    updateRace(race, { ...EMPTY_INPUT, reset: true }, 1 / 60)
+
+    expect(player.distance).toBe(player.lastGateDistance)
+    expect(player.speedPadPulse + player.rechargePadPulse).toBe(0)
+    expect(race.padCooldowns[`player:${pad.id}`]).toBeUndefined()
+  })
+
+  it('rewards the player when a nearby rival crashes out', () => {
+    const race = startRace('balanced')
+    race.phase = 'racing'
+    const player = getPlayer(race)
+    const rival = race.vehicles[1]
+    if (!rival) throw new Error('Missing rival')
+    player.distance = 80
+    player.lane = 0
+    player.power = 0.35
+    rival.distance = 84
+    rival.lane = race.track.sample(rival.distance).width * 0.5
+    rival.lastGateDistance = 70
+    rival.forwardSpeed = SHIP_PROFILES[rival.profileId].boostSpeed
+    rival.lateralSpeed = 120
+    rival.power = 0.001
+    rival.crashOutGraceRemaining = 0
+
+    updateRace(race, EMPTY_INPUT, 1 / 60)
+
+    expect(rival.crashOutCount).toBe(1)
+    expect(player.power).toBeGreaterThan(0.45)
+    expect(race.lastToast).toBe('RIVAL DOWN')
   })
 
   it('separates exact same-lane pack overlaps deterministically', () => {

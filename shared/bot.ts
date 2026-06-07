@@ -96,10 +96,11 @@ const applyPackBehavior = (
   vehicles: Vehicle[],
   dt: number,
 ): number => {
+  const profile = SHIP_PROFILES[vehicle.profileId]
   let desiredLaneBias = 0
   let draft = 0
   let brake = 0
-  const packSenseDistance = 62
+  const packSenseDistance = clamp(46 + Math.abs(vehicle.forwardSpeed) * 0.22, 52, 74)
   const sideSenseDistance = 34
   const laneSpacing = 2.55
 
@@ -114,7 +115,16 @@ const applyPackBehavior = (
       draft = Math.max(draft, closeness)
       const side = Math.abs(lateralDelta) > 0.24 ? Math.sign(lateralDelta) : (brain.seed + brainFraction(other.id)) % 1 > 0.5 ? 1 : -1
       desiredLaneBias += side * 1.5 * closeness
-      if (gap < 13.5) brake = Math.max(brake, 1 - gap / 13.5)
+      const closingSpeed = vehicle.forwardSpeed - other.forwardSpeed
+      const sameLaneRisk = saturate(1 - lateralDistance / laneSpacing)
+      const timeToContact = closingSpeed > 0 ? gap / Math.max(0.001, closingSpeed) : Number.POSITIVE_INFINITY
+      const closingUrgency = Number.isFinite(timeToContact) ? saturate((1.15 - timeToContact) / 1.15) : 0
+      const emergencyOverlap = gap < 5.4 ? saturate(1 - gap / 5.4) : 0
+      const closingRatio = saturate(closingSpeed / Math.max(1, profile.maxSpeed * 0.38))
+      brake = Math.max(
+        brake,
+        sameLaneRisk * Math.max(closingUrgency, closingRatio * closeness * 0.9, emergencyOverlap * 0.75),
+      )
     }
     if (Math.abs(gap) <= sideSenseDistance && lateralDistance < laneSpacing) {
       const sidePressure = 1 - lateralDistance / laneSpacing
@@ -151,8 +161,8 @@ export const getBotInput = (
 
   const targetLane = clamp(
     brain.laneBias + brain.padLaneBias + brain.cleanLineBias,
-    -track.width * 0.42,
-    track.width * 0.42,
+    -track.sample(vehicle.distance).width * 0.42,
+    track.sample(vehicle.distance).width * 0.42,
   )
   const laneError = targetLane - vehicle.lane
   const steer = clamp(laneError * 0.2 - vehicle.lateralSpeed * 0.04, -1, 1)

@@ -580,6 +580,7 @@
   }
 
   .hud-race {
+    display: none;
     transform-origin: top right;
   }
 

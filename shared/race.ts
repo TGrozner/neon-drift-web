@@ -286,7 +286,11 @@ const checkGates = (race: RaceState, vehicle: Vehicle): void => {
   markGatePassed(vehicle, gateIndex, gate.distance, race.track.gates.length)
 }
 
-const applyRivalPassReward = (race: RaceState, beforeProgress: Record<string, number>): void => {
+const applyRivalPassReward = (
+  race: RaceState,
+  beforeProgress: Record<string, number>,
+  beforeCrashOutCounts: Record<string, number>,
+): void => {
   const player = getPlayer(race)
   const beforePlayer = beforeProgress[player.id] ?? 0
   const afterPlayer = progressFor(race, player)
@@ -295,6 +299,7 @@ const applyRivalPassReward = (race: RaceState, beforeProgress: Record<string, nu
     : race.vehicles.filter((vehicle) => vehicle.id !== player.id && !vehicle.finished)
   for (const other of rivals) {
     if (other.id === player.id || other.finished) continue
+    if (other.crashOutCount > (beforeCrashOutCounts[other.id] ?? 0)) continue
     const beforeOther = beforeProgress[other.id] ?? 0
     const afterOther = progressFor(race, other)
     if (beforePlayer <= beforeOther && afterPlayer > afterOther) {
@@ -303,6 +308,27 @@ const applyRivalPassReward = (race: RaceState, beforeProgress: Record<string, nu
       setToast(race, 'RIVAL PASSED')
       return
     }
+  }
+}
+
+const applyRivalCrashOutReward = (
+  race: RaceState,
+  beforeCrashOutCounts: Record<string, number>,
+  beforeProgress: Record<string, number>,
+): void => {
+  const player = getPlayer(race)
+  if (player.finished) return
+  const beforePlayer = beforeProgress[player.id] ?? progressFor(race, player)
+  const maxRewardGap = Math.min(110, race.track.totalLength * 0.28)
+  for (const other of race.vehicles) {
+    if (other.id === player.id || other.finished) continue
+    if (other.crashOutCount <= (beforeCrashOutCounts[other.id] ?? 0)) continue
+    const beforeOther = beforeProgress[other.id] ?? progressFor(race, other)
+    if (Math.abs(beforeOther - beforePlayer) > maxRewardGap) continue
+    player.power = Math.min(1, player.power + RACE.rivalCrashOutPowerReward)
+    player.rivalPassPulse = 1
+    setToast(race, 'RIVAL DOWN')
+    return
   }
 }
 
@@ -362,6 +388,7 @@ export const updateRace = (
 
   race.raceTime += dt
   const beforeProgress = Object.fromEntries(race.vehicles.map((vehicle) => [vehicle.id, progressFor(race, vehicle)]))
+  const beforeCrashOutCounts = Object.fromEntries(race.vehicles.map((vehicle) => [vehicle.id, vehicle.crashOutCount]))
 
   for (const vehicle of race.vehicles) {
     const input = vehicle.isPlayer
@@ -424,7 +451,8 @@ export const updateRace = (
     }
   }
 
-  applyRivalPassReward(race, beforeProgress)
+  applyRivalCrashOutReward(race, beforeCrashOutCounts, beforeProgress)
+  applyRivalPassReward(race, beforeProgress, beforeCrashOutCounts)
   updateStandings(race)
   updateRivals(race)
 

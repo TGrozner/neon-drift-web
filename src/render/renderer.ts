@@ -70,6 +70,22 @@ export const createRenderBasis = (
   return { forward: x, up: y, right: z }
 }
 
+type GatePortal = {
+  postMaterial: THREE.MeshStandardMaterial
+  beamMaterial: THREE.MeshStandardMaterial
+  lineMaterial: THREE.LineBasicMaterial
+}
+
+type NeonRenderStats = {
+  calls: number
+  triangles: number
+  sourceShipCount: number
+  bloomStrength: number
+  gatePortalCount: number
+  padMarkerCount: number
+  trackEnvironmentInstances: number
+}
+
 export class NeonRenderer {
   private readonly canvas: HTMLCanvasElement
   private readonly renderer: THREE.WebGLRenderer
@@ -80,6 +96,7 @@ export class NeonRenderer {
   private readonly shipGroups = new Map<string, THREE.Group>()
   private readonly shipMaterials = new Map<string, THREE.MeshStandardMaterial>()
   private readonly gateLines = new Map<number, THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>>()
+  private readonly gatePortals = new Map<number, GatePortal>()
   private readonly slipstreamGroup = new THREE.Group()
   private readonly slipstreamMesh: THREE.InstancedMesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>
   private readonly slipstreamDummy = new THREE.Object3D()
@@ -89,6 +106,8 @@ export class NeonRenderer {
   private smoothedCameraForward = new THREE.Vector3()
   private cameraRoll = 0
   private trackId = ''
+  private padMarkerCount = 0
+  private trackEnvironmentInstances = 0
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -134,7 +153,7 @@ export class NeonRenderer {
 
     const grid = new THREE.GridHelper(260, 52, '#1a5367', '#101622')
     grid.position.y = -0.08
-    grid.material.opacity = 0.32
+    grid.material.opacity = 0.16
     grid.material.transparent = true
     this.scene.add(grid)
   }
@@ -176,14 +195,23 @@ export class NeonRenderer {
     this.updateCamera(race)
     this.updatePostProcessing(race)
     this.composer.render()
-    const statsWindow = window as Window & typeof globalThis & {
-      __NEON_RENDER_STATS?: { calls: number; triangles: number; sourceShipCount: number; bloomStrength: number }
+    const statsWindow = window as Window & typeof globalThis & { __NEON_RENDER_STATS?: NeonRenderStats }
+    const stats = statsWindow.__NEON_RENDER_STATS ?? {
+      calls: 0,
+      triangles: 0,
+      sourceShipCount: 0,
+      bloomStrength: 0,
+      gatePortalCount: 0,
+      padMarkerCount: 0,
+      trackEnvironmentInstances: 0,
     }
-    const stats = statsWindow.__NEON_RENDER_STATS ?? { calls: 0, triangles: 0, sourceShipCount: 0, bloomStrength: 0 }
     stats.calls = this.renderer.info.render.calls
     stats.triangles = this.renderer.info.render.triangles
     stats.sourceShipCount = [...this.shipGroups.values()].filter((group) => group.getObjectByName('source-ship-model')).length
     stats.bloomStrength = this.bloomPass.strength
+    stats.gatePortalCount = this.gatePortals.size
+    stats.padMarkerCount = this.padMarkerCount
+    stats.trackEnvironmentInstances = this.trackEnvironmentInstances
     statsWindow.__NEON_RENDER_STATS = stats
   }
 
@@ -194,6 +222,9 @@ export class NeonRenderer {
       this.disposeObject(stale)
     }
     this.gateLines.clear()
+    this.gatePortals.clear()
+    this.padMarkerCount = 0
+    this.trackEnvironmentInstances = 0
     const root = new THREE.Group()
     root.name = 'track-root'
 
@@ -227,7 +258,7 @@ export class NeonRenderer {
     )
     root.add(trackMesh)
 
-    const edgeMaterial = new THREE.LineBasicMaterial({ color: '#6ce8ff' })
+    const edgeMaterial = new THREE.LineBasicMaterial({ color: '#6ce8ff', transparent: true, opacity: 0.78 })
     for (const side of [-1, 1]) {
       const points: THREE.Vector3[] = []
       for (let i = 0; i <= samples; i += 1) {
@@ -238,48 +269,16 @@ export class NeonRenderer {
       root.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), edgeMaterial))
     }
 
+    this.addTrackGuideStrips(root, track)
+    this.addTrackEnvironment(root, track)
     this.addTrackKitSegments(root, track)
 
     for (const gate of track.gates) {
-      const profile = track.sample(gate.distance)
-      const left = trackToWorld(track, gate.distance, -gate.halfWidth, 0.35)
-      const right = trackToWorld(track, gate.distance, gate.halfWidth, 0.35)
-      const leftTop = add3(left, scale3(profile.up, 5.8))
-      const rightTop = add3(right, scale3(profile.up, 5.8))
-      const gateGeometry = new THREE.BufferGeometry().setFromPoints([
-        toThree(left),
-        toThree(leftTop),
-        toThree(leftTop),
-        toThree(rightTop),
-        toThree(rightTop),
-        toThree(right),
-      ])
-      const gateMaterial = new THREE.LineBasicMaterial({
-        color: '#ff3df2',
-        transparent: true,
-        opacity: 0.36,
-        toneMapped: false,
-      })
-      const gateLine = new THREE.LineSegments(gateGeometry, gateMaterial)
-      gateLine.userData.gateIndex = gate.index
-      root.add(gateLine)
-      this.gateLines.set(gate.index, gateLine)
+      this.addGatePortal(root, track, gate)
     }
 
     for (const pad of track.pads) {
-      const profile = track.sample(pad.distance)
-      const padMesh = new THREE.Mesh(
-        new THREE.BoxGeometry(pad.halfLength * 2, 0.16, pad.halfWidth * 2),
-        new THREE.MeshStandardMaterial({
-          color: pad.kind === 'boost' ? '#6ce8ff' : '#5dfd7a',
-          emissive: pad.kind === 'boost' ? '#164d6b' : '#164d24',
-          transparent: true,
-          opacity: 0.86,
-        }),
-      )
-      padMesh.position.copy(toThree(trackToWorld(track, pad.distance, pad.lane, 0.14)))
-      this.applyBasis(padMesh, profile.tangent, profile.up, profile.right)
-      root.add(padMesh)
+      this.addPadMarker(root, track, pad)
     }
 
     const startProfile = track.sample(0)
@@ -298,6 +297,194 @@ export class NeonRenderer {
     root.add(startMesh)
 
     this.scene.add(root)
+  }
+
+  private addTrackGuideStrips(root: THREE.Group, track: RaceTrack): void {
+    const samples = 260
+    const guides = [
+      { laneRatio: -0.26, color: '#274f66', opacity: 0.42 },
+      { laneRatio: 0, color: '#ffbf4a', opacity: 0.36 },
+      { laneRatio: 0.26, color: '#274f66', opacity: 0.42 },
+    ]
+    for (const guide of guides) {
+      const points: THREE.Vector3[] = []
+      for (let i = 0; i <= samples; i += 1) {
+        const distance = (track.totalLength * i) / samples
+        const profile = track.sample(distance)
+        points.push(toThree(trackToWorld(track, distance, profile.width * guide.laneRatio, 0.22)))
+      }
+      root.add(
+        new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints(points),
+          new THREE.LineBasicMaterial({
+            color: guide.color,
+            transparent: true,
+            opacity: guide.opacity,
+          }),
+        ),
+      )
+    }
+  }
+
+  private addTrackEnvironment(root: THREE.Group, track: RaceTrack): void {
+    const towerCount = Math.round(clamp(track.totalLength / 14, 36, 88))
+    const beaconCount = Math.round(clamp(track.totalLength / 8, 52, 150))
+    const dummy = new THREE.Object3D()
+    const towerMesh = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshStandardMaterial({
+        color: '#171b2e',
+        roughness: 0.68,
+        metalness: 0.34,
+        emissive: '#09172c',
+        emissiveIntensity: 0.48,
+      }),
+      towerCount,
+    )
+    const beaconMesh = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshStandardMaterial({
+        color: '#6ce8ff',
+        roughness: 0.38,
+        metalness: 0.28,
+        emissive: '#2be4ff',
+        emissiveIntensity: 1.25,
+      }),
+      beaconCount,
+    )
+
+    for (let i = 0; i < towerCount; i += 1) {
+      const distance = (track.totalLength * (i + 0.5)) / towerCount
+      const profile = track.sample(distance)
+      const side = i % 2 === 0 ? 1 : -1
+      const rhythm = ((i * 37) % 17) / 17
+      const height = 9 + rhythm * 24
+      const offset = profile.width * 0.5 + 24 + rhythm * 26
+      const position = add3(profile.center, scale3(profile.right, offset * side))
+      dummy.position.set(position.x, Math.max(-8, profile.center.y - 5) + height * 0.5, position.z)
+      dummy.rotation.set(0, Math.atan2(profile.tangent.x, profile.tangent.z) + rhythm * 0.38, 0)
+      dummy.scale.set(1.5 + rhythm * 2.8, height, 2.2 + (1 - rhythm) * 3.1)
+      dummy.updateMatrix()
+      towerMesh.setMatrixAt(i, dummy.matrix)
+    }
+
+    for (let i = 0; i < beaconCount; i += 1) {
+      const distance = (track.totalLength * i) / beaconCount
+      const profile = track.sample(distance)
+      const side = i % 2 === 0 ? 1 : -1
+      const position = add3(
+        add3(profile.center, scale3(profile.right, side * (profile.width * 0.5 + 1.2))),
+        scale3(profile.up, 0.42),
+      )
+      dummy.position.copy(toThree(position))
+      this.applyBasis(dummy, profile.tangent, profile.up, profile.right)
+      dummy.scale.set(0.34, 0.22, 0.92)
+      dummy.updateMatrix()
+      beaconMesh.setMatrixAt(i, dummy.matrix)
+    }
+
+    towerMesh.instanceMatrix.needsUpdate = true
+    beaconMesh.instanceMatrix.needsUpdate = true
+    root.add(towerMesh, beaconMesh)
+    this.trackEnvironmentInstances = towerCount + beaconCount
+  }
+
+  private addGatePortal(root: THREE.Group, track: RaceTrack, gate: RaceTrack['gates'][number]): void {
+    const profile = track.sample(gate.distance)
+    const postMaterial = new THREE.MeshStandardMaterial({
+      color: '#252b3c',
+      roughness: 0.42,
+      metalness: 0.48,
+      emissive: '#3b0d45',
+      emissiveIntensity: 0.82,
+    })
+    const beamMaterial = new THREE.MeshStandardMaterial({
+      color: '#ff3df2',
+      roughness: 0.32,
+      metalness: 0.38,
+      emissive: '#ff3df2',
+      emissiveIntensity: 0.88,
+    })
+    const postGeometry = new THREE.BoxGeometry(0.62, 5.8, 0.62)
+    for (const lane of [-gate.halfWidth - 0.34, gate.halfWidth + 0.34]) {
+      const post = new THREE.Mesh(postGeometry, postMaterial)
+      post.position.copy(toThree(trackToWorld(track, gate.distance, lane, 3.1)))
+      this.applyBasis(post, profile.tangent, profile.up, profile.right)
+      root.add(post)
+    }
+
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.4, gate.halfWidth * 2 + 1.2), beamMaterial)
+    beam.position.copy(toThree(trackToWorld(track, gate.distance, 0, 6.15)))
+    this.applyBasis(beam, profile.tangent, profile.up, profile.right)
+    root.add(beam)
+
+    const left = trackToWorld(track, gate.distance, -gate.halfWidth, 0.42)
+    const right = trackToWorld(track, gate.distance, gate.halfWidth, 0.42)
+    const leftTop = add3(left, scale3(profile.up, 6.2))
+    const rightTop = add3(right, scale3(profile.up, 6.2))
+    const gateGeometry = new THREE.BufferGeometry().setFromPoints([
+      toThree(left),
+      toThree(leftTop),
+      toThree(leftTop),
+      toThree(rightTop),
+      toThree(rightTop),
+      toThree(right),
+    ])
+    const gateMaterial = new THREE.LineBasicMaterial({
+      color: '#ff3df2',
+      transparent: true,
+      opacity: 0.42,
+      toneMapped: false,
+    })
+    const gateLine = new THREE.LineSegments(gateGeometry, gateMaterial)
+    gateLine.userData.gateIndex = gate.index
+    root.add(gateLine)
+    this.gateLines.set(gate.index, gateLine)
+    this.gatePortals.set(gate.index, { postMaterial, beamMaterial, lineMaterial: gateMaterial })
+  }
+
+  private addPadMarker(root: THREE.Group, track: RaceTrack, pad: RaceTrack['pads'][number]): void {
+    const profile = track.sample(pad.distance)
+    const group = new THREE.Group()
+    const isBoost = pad.kind === 'boost'
+    const color = isBoost ? '#6ce8ff' : '#5dfd7a'
+    const emissive = isBoost ? '#164d6b' : '#164d24'
+    group.position.copy(toThree(trackToWorld(track, pad.distance, pad.lane, 0.16)))
+    this.applyBasis(group, profile.tangent, profile.up, profile.right)
+
+    const base = new THREE.Mesh(
+      new THREE.BoxGeometry(pad.halfLength * 2, 0.16, pad.halfWidth * 2),
+      new THREE.MeshStandardMaterial({
+        color,
+        emissive,
+        emissiveIntensity: 0.9,
+        roughness: 0.34,
+        metalness: 0.28,
+        transparent: true,
+        opacity: 0.9,
+      }),
+    )
+    group.add(base)
+
+    const chevronMaterial = new THREE.MeshStandardMaterial({
+      color: '#f7fbff',
+      emissive: color,
+      emissiveIntensity: 1.25,
+      roughness: 0.24,
+      metalness: 0.18,
+    })
+    for (let i = 0; i < 3; i += 1) {
+      const x = -pad.halfLength * 0.62 + i * pad.halfLength * 0.62
+      for (const side of [-1, 1]) {
+        const chevron = new THREE.Mesh(new THREE.BoxGeometry(pad.halfLength * 0.36, 0.08, 0.16), chevronMaterial)
+        chevron.position.set(x, 0.13, side * pad.halfWidth * 0.24)
+        chevron.rotation.y = side * (isBoost ? -0.62 : 0.62)
+        group.add(chevron)
+      }
+    }
+
+    root.add(group)
+    this.padMarkerCount += 1
   }
 
   private addTrackKitSegments(root: THREE.Group, track: RaceTrack): void {
@@ -562,15 +749,37 @@ export class NeonRenderer {
     const pulse = 0.5 + Math.sin((race.raceTime + race.phaseTime) * 9.2) * 0.5
     for (const [index, gateLine] of this.gateLines) {
       const material = gateLine.material
+      const portal = this.gatePortals.get(index)
       if (index === player.nextGateIndex) {
         material.color.set('#fff27a')
-        material.opacity = 0.72 + pulse * 0.24
+        material.opacity = 0.54 + pulse * 0.18
+        portal?.postMaterial.emissive.set('#6ce8ff')
+        portal?.beamMaterial.color.set('#fff27a')
+        portal?.beamMaterial.emissive.set('#fff27a')
+        if (portal) {
+          portal.postMaterial.emissiveIntensity = 0.72 + pulse * 0.34
+          portal.beamMaterial.emissiveIntensity = 0.82 + pulse * 0.46
+        }
       } else if (index === player.lastGateIndex) {
         material.color.set('#5dfd7a')
         material.opacity = 0.26
+        portal?.postMaterial.emissive.set('#174d25')
+        portal?.beamMaterial.color.set('#5dfd7a')
+        portal?.beamMaterial.emissive.set('#5dfd7a')
+        if (portal) {
+          portal.postMaterial.emissiveIntensity = 0.5
+          portal.beamMaterial.emissiveIntensity = 0.62
+        }
       } else {
         material.color.set('#ff3df2')
         material.opacity = 0.18
+        portal?.postMaterial.emissive.set('#35103d')
+        portal?.beamMaterial.color.set('#ff3df2')
+        portal?.beamMaterial.emissive.set('#ff3df2')
+        if (portal) {
+          portal.postMaterial.emissiveIntensity = 0.34
+          portal.beamMaterial.emissiveIntensity = 0.38
+        }
       }
     }
   }
@@ -593,10 +802,12 @@ export class NeonRenderer {
 
   private disposeObject(object: THREE.Object3D): void {
     object.traverse((child) => {
-      const mesh = child as THREE.Mesh
-      if (!mesh.isMesh) return
-      mesh.geometry?.dispose()
-      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+      const renderable = child as THREE.Object3D & {
+        geometry?: THREE.BufferGeometry
+        material?: THREE.Material | THREE.Material[]
+      }
+      renderable.geometry?.dispose()
+      const materials = Array.isArray(renderable.material) ? renderable.material : [renderable.material]
       for (const material of materials) material?.dispose()
     })
   }

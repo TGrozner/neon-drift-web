@@ -4,6 +4,7 @@ import {
   EMPTY_INPUT,
   applyPowerDamage,
   createVehicle,
+  resetToLastGate,
   stepVehicle,
 } from '../shared/physics'
 import { NEON_OVAL, trackById } from '../shared/track'
@@ -317,15 +318,33 @@ describe('ship physics', () => {
 
   it('crash-out restores checkpoint, power, grace, and penalty', () => {
     const vehicle = createVehicle('ship', 'Ship', 'balanced', true, 40, 3)
+    vehicle.previousDistance = 36
+    vehicle.previousLane = 2
     vehicle.lastGateDistance = 25
     applyPowerDamage(vehicle, 2)
 
     expect(vehicle.distance).toBe(25)
     expect(vehicle.lane).toBe(0)
+    expect(vehicle.previousDistance).toBe(vehicle.distance)
+    expect(vehicle.previousLane).toBe(vehicle.lane)
     expect(vehicle.power).toBeGreaterThan(0.3)
     expect(vehicle.crashOutCount).toBe(1)
     expect(vehicle.timePenalty).toBe(3)
     expect(vehicle.crashOutGraceRemaining).toBeGreaterThan(1)
+  })
+
+  it('manual reset syncs swept crossing origin to the checkpoint', () => {
+    const vehicle = createVehicle('ship', 'Ship', 'balanced', true, 80, 3)
+    vehicle.previousDistance = 70
+    vehicle.previousLane = -2
+    vehicle.lastGateDistance = 22
+
+    resetToLastGate(vehicle)
+
+    expect(vehicle.distance).toBe(22)
+    expect(vehicle.lane).toBe(0)
+    expect(vehicle.previousDistance).toBe(vehicle.distance)
+    expect(vehicle.previousLane).toBe(vehicle.lane)
   })
 
   it('flags wrong-way after sustained reverse movement', () => {
@@ -388,6 +407,8 @@ describe('ship physics', () => {
 
     expect(vehicle.distance).toBe(12)
     expect(vehicle.lane).toBe(0)
+    expect(vehicle.previousDistance).toBe(vehicle.distance)
+    expect(vehicle.previousLane).toBe(vehicle.lane)
     expect(vehicle.crashOutGraceRemaining).toBeGreaterThan(0)
   })
 })

@@ -294,6 +294,11 @@ export const applyPowerDamage = (vehicle: Vehicle, amount: number): void => {
   if (vehicle.power <= 0) crashOut(vehicle)
 }
 
+const syncSweepOrigin = (vehicle: Vehicle): void => {
+  vehicle.previousDistance = vehicle.distance
+  vehicle.previousLane = vehicle.lane
+}
+
 export const crashOut = (vehicle: Vehicle): void => {
   vehicle.isBoosting = false
   vehicle.isAirbraking = false
@@ -304,6 +309,7 @@ export const crashOut = (vehicle: Vehicle): void => {
   vehicle.visualPitch = 0
   vehicle.distance = vehicle.lastGateDistance
   vehicle.lane = 0
+  syncSweepOrigin(vehicle)
   vehicle.power = CRASH_OUT.restorePower
   vehicle.crashOutCount += 1
   vehicle.timePenalty += CRASH_OUT.timePenaltySeconds
@@ -322,6 +328,7 @@ export const crashOut = (vehicle: Vehicle): void => {
 export const resetToLastGate = (vehicle: Vehicle): void => {
   vehicle.distance = vehicle.lastGateDistance
   vehicle.lane = 0
+  syncSweepOrigin(vehicle)
   vehicle.forwardSpeed = Math.max(vehicle.forwardSpeed * 0.35, CRASH_OUT.respawnSpeed)
   vehicle.lateralSpeed = 0
   vehicle.yawOffset = 0
@@ -621,6 +628,9 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
   let drag = profile.drag
   if (vehicle.isAirbraking) drag *= Math.abs(steer) > 0.2 ? 1.72 : 3.05
   if (vehicle.telemetry.offTrack) drag *= TRACK_LIMITS.offTrackDragMultiplier
+  if (vehicle.railContactMemorySeconds > 0 || vehicle.packBumpPulse > 0) {
+    drag *= TRACK_LIMITS.contactDragMultiplier
+  }
   headingForwardSpeed = expDecay(headingForwardSpeed, drag, dt)
   headingSideSpeed = expDecay(headingSideSpeed, drag, dt)
   velocity = add3(scale3(heading, headingForwardSpeed), scale3(headingRight, headingSideSpeed))
@@ -672,7 +682,12 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
     )
     vehicle.lateralSpeed = -side * normalSpeed
     const slideLoss = (1 - TRACK_LIMITS.railSlideTangentRetention) * vehicle.telemetry.railPressure
-    vehicle.forwardSpeed *= Math.max(0.82, 1 - slideLoss)
+    const railRetentionFloor = Math.min(
+      1,
+      TRACK_LIMITS.railSlideForwardMinimumScale +
+        (TRACK_LIMITS.railSlidePinnedForwardMinimumScale - TRACK_LIMITS.railSlideForwardMinimumScale) * pinnedRatio,
+    )
+    vehicle.forwardSpeed *= Math.max(railRetentionFloor, 1 - slideLoss)
     const yawSharpness = TRACK_LIMITS.railSlideYawSharpness +
       (TRACK_LIMITS.railSlidePinnedYawSharpness - TRACK_LIMITS.railSlideYawSharpness) * pinnedRatio
     vehicle.yawOffset = approach(vehicle.yawOffset, 0, yawSharpness, dt)

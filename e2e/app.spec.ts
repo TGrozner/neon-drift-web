@@ -213,7 +213,13 @@ test('starts a playable 3D race and renders canvas pixels', async ({ page }) => 
   await expect.poll(() => canvasHasNonBlankPixels(page)).toBe(true)
   await expect.poll(() => page.evaluate(() => {
     const stats = (window as Window & typeof globalThis & {
-      __NEON_RENDER_STATS?: { sourceShipCount?: number; bloomStrength?: number }
+      __NEON_RENDER_STATS?: {
+        sourceShipCount?: number
+        bloomStrength?: number
+        gatePortalCount?: number
+        padMarkerCount?: number
+        trackEnvironmentInstances?: number
+      }
     }).__NEON_RENDER_STATS
     return stats?.sourceShipCount ?? 0
   }), { timeout: 10_000 }).toBeGreaterThan(0)
@@ -223,6 +229,18 @@ test('starts a playable 3D race and renders canvas pixels', async ({ page }) => 
     }).__NEON_RENDER_STATS
     return stats?.bloomStrength ?? 0
   })).toBeGreaterThan(0.6)
+  await expect.poll(() => page.evaluate(() => {
+    const stats = (window as Window & typeof globalThis & {
+      __NEON_RENDER_STATS?: { gatePortalCount?: number }
+    }).__NEON_RENDER_STATS
+    return stats?.gatePortalCount ?? 0
+  })).toBe(8)
+  await expect.poll(() => page.evaluate(() => {
+    const stats = (window as Window & typeof globalThis & {
+      __NEON_RENDER_STATS?: { padMarkerCount?: number; trackEnvironmentInstances?: number }
+    }).__NEON_RENDER_STATS
+    return (stats?.padMarkerCount ?? 0) > 0 && (stats?.trackEnvironmentInstances ?? 0) > 80
+  })).toBe(true)
 })
 
 test('starts a playable source-authored inversion track', async ({ page }) => {
