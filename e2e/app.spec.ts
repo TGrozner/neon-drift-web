@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 
 type AudioSpyEvent = {
   type: 'create' | 'play' | 'pause' | 'volume' | 'playbackRate'
@@ -32,6 +32,10 @@ const canvasHasNonBlankPixels = async (page: import('@playwright/test').Page) =>
 
 const hudSpeed = async (page: import('@playwright/test').Page) =>
   Number.parseInt((await page.locator('.speed-readout').textContent()) ?? '0', 10)
+
+const goToGame = async (page: Page) => {
+  await page.goto('./?e2e=1')
+}
 
 const installAudioSpy = async (page: import('@playwright/test').Page) => {
   await page.addInitScript(() => {
@@ -132,7 +136,7 @@ test('lays out the menu choices without overlap', async ({ page }) => {
     { width: 390, height: 844 },
   ]) {
     await page.setViewportSize(viewport)
-    await page.goto('/?e2e=1')
+    await goToGame(page)
     await expect(page.getByTestId('main-menu')).toBeVisible()
     await expect.poll(() => menuHasNoChoiceOverlap(page)).toBe(true)
     await expect.poll(() => elementsHaveNoVisibleOverlap(page, '.start-button', '.track-option, .ship-card')).toBe(true)
@@ -148,7 +152,7 @@ test('lays out the menu choices without overlap', async ({ page }) => {
 
 test('advances the tutorial after acknowledged launch telemetry changes', async ({ page }) => {
   await page.addInitScript(() => localStorage.removeItem('neon_drift_web.tutorial.v1.complete'))
-  await page.goto('/?e2e=1')
+  await goToGame(page)
   await page.getByTestId('start-race').click()
   await expect(page.getByTestId('tutorial')).toContainText('Launch clean')
   await expect(page.getByTestId('tutorial')).toContainText('1/8')
@@ -162,7 +166,7 @@ test('advances the tutorial after acknowledged launch telemetry changes', async 
 
 test('keeps the mobile event strip clear of the airbrake charge meter', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto('/?e2e=1')
+  await goToGame(page)
   await page.getByTestId('start-race').click()
   await page.keyboard.down('z')
   await page.keyboard.down('Shift')
@@ -178,7 +182,7 @@ test('keeps the mobile event strip clear of the airbrake charge meter', async ({
 
 test('drives with mobile touch throttle', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto('/?e2e=1')
+  await goToGame(page)
   await page.getByTestId('start-race').click()
   const throttle = page.getByLabel('Throttle')
   await throttle.dispatchEvent('pointerdown', { pointerId: 7, button: 0, isPrimary: true, pointerType: 'touch' })
@@ -192,7 +196,7 @@ test('drives with mobile touch throttle', async ({ page }) => {
 })
 
 test('starts a playable 3D race and renders canvas pixels', async ({ page }) => {
-  await page.goto('/?e2e=1')
+  await goToGame(page)
   await expect(page.getByTestId('main-menu')).toBeVisible()
   await expect(page.getByText('NEON DRIFT')).toBeVisible()
   await expect.poll(() => menuHasNoChoiceOverlap(page)).toBe(true)
@@ -244,7 +248,7 @@ test('starts a playable 3D race and renders canvas pixels', async ({ page }) => 
 })
 
 test('starts a playable source-authored inversion track', async ({ page }) => {
-  await page.goto('/?e2e=1')
+  await goToGame(page)
   await page.getByRole('button', { name: /Inversion Ribbon/ }).click()
   await expect(page.locator('.menu-meta')).toContainText('Inversion Ribbon')
   await page.getByTestId('start-race').click()
@@ -257,7 +261,7 @@ test('starts a playable source-authored inversion track', async ({ page }) => {
 
 test('keeps race audio synchronized with live race state', async ({ page }) => {
   await installAudioSpy(page)
-  await page.goto('/?e2e=1')
+  await goToGame(page)
   await page.getByTestId('start-race').click()
   await page.keyboard.down('z')
   await page.keyboard.down('Shift')

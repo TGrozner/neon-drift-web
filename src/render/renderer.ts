@@ -9,6 +9,7 @@ import { add3, clamp, cross3, dot3, normalize3, scale3, type Vec3 } from '../../
 import type { RaceState } from '../../shared/race'
 import { trackToWorld, type RaceTrack } from '../../shared/track'
 import type { Vehicle } from '../../shared/physics'
+import { publicAsset } from '../publicAssets'
 
 const toThree = (v: Vec3): THREE.Vector3 => new THREE.Vector3(v.x, v.y, v.z)
 
@@ -16,9 +17,9 @@ const modelLoader = new GLTFLoader()
 const modelCache = new Map<string, Promise<THREE.Group>>()
 
 const shipModels = {
-  balanced: '/models/neon_drift/ships/prototype_scout.glb',
-  swift: '/models/neon_drift/ships/prototype_swift.glb',
-  heavy: '/models/neon_drift/ships/prototype_heavy.glb',
+  balanced: publicAsset('models/neon_drift/ships/prototype_scout.glb'),
+  swift: publicAsset('models/neon_drift/ships/prototype_swift.glb'),
+  heavy: publicAsset('models/neon_drift/ships/prototype_heavy.glb'),
 } as const
 const RENDERED_SLIPSTREAM_SEGMENTS = 24
 const ENABLE_SOURCE_SHIP_MODELS = true

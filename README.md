@@ -45,6 +45,12 @@ npm run build
 npm run e2e
 ```
 
+## Production
+
+Production deploys from `main` to GitHub Pages through GitHub Actions:
+
+https://tgrozner.github.io/neon-drift-web/
+
 ## Architecture
 
 - `shared/`: deterministic gameplay modules usable by client/server style code.

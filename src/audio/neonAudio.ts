@@ -1,5 +1,6 @@
 import { CRASH_OUT, RACE, SHIP_PROFILES } from '../../shared/constants'
 import { getPlayer, type RacePhase, type RaceState } from '../../shared/race'
+import { publicAsset } from '../publicAssets'
 
 type Cue =
   | 'ready'
@@ -49,7 +50,7 @@ type Snapshot = {
   wrongWay: boolean
 }
 
-const basePath = '/audio/neon_drift/'
+const audioPath = (cue: Cue): string => publicAsset(`audio/neon_drift/${cuePaths[cue]}`)
 
 const cuePaths: Record<Cue, string> = {
   ready: 'ready.wav',
@@ -250,7 +251,7 @@ export class NeonAudioEngine {
       current.volume = volume
       return current
     }
-    const audio = new Audio(basePath + cuePaths[cue])
+    const audio = new Audio(audioPath(cue))
     audio.loop = true
     audio.volume = volume
     tryPlay(audio)
@@ -265,7 +266,7 @@ export class NeonAudioEngine {
 
   private play(cue: Cue): void {
     if (!this.unlocked) return
-    const audio = new Audio(basePath + cuePaths[cue])
+    const audio = new Audio(audioPath(cue))
     audio.volume = oneShotVolume[cue] ?? 0.5
     tryPlay(audio)
   }
