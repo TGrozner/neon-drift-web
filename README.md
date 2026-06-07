@@ -47,9 +47,13 @@ npm run e2e
 
 ## Production
 
-Production deploys from `main` to GitHub Pages through GitHub Actions:
+Production is prepared for GitHub Pages through GitHub Actions:
 
 https://tgrozner.github.io/neon-drift-web/
+
+The deploy job runs from `main` when the repository is public, or when the
+repository variable `ENABLE_GITHUB_PAGES_DEPLOY` is set to `true` after GitHub
+Pages is available for this repository.
 
 ## Architecture
 
