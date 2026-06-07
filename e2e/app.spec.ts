@@ -7,6 +7,8 @@ type AudioSpyEvent = {
   loop?: boolean
 }
 
+const tutorialStorageKey = 'neon_drift_web.tutorial.v1.complete'
+
 const canvasHasNonBlankPixels = async (page: import('@playwright/test').Page) =>
   page.evaluate(async () => {
     const canvas = document.querySelector<HTMLCanvasElement>('canvas.game-canvas')
@@ -33,8 +35,29 @@ const canvasHasNonBlankPixels = async (page: import('@playwright/test').Page) =>
 const hudSpeed = async (page: import('@playwright/test').Page) =>
   Number.parseInt((await page.locator('.speed-readout').textContent()) ?? '0', 10)
 
-const goToGame = async (page: Page) => {
+const goToGame = async (page: Page, { tutorialComplete = true } = {}) => {
+  if (tutorialComplete) {
+    await page.addInitScript((key) => localStorage.setItem(key, 'true'), tutorialStorageKey)
+  }
   await page.goto('./?e2e=1')
+}
+
+const focusRace = async (page: Page) => {
+  await page.locator('canvas.game-canvas').click({ force: true, position: { x: 16, y: 16 } })
+}
+
+const holdThrottle = async (page: Page) => {
+  await page.keyboard.down('w')
+  await page.keyboard.down('ArrowUp')
+}
+
+const releaseThrottle = async (page: Page) => {
+  await page.keyboard.up('ArrowUp')
+  await page.keyboard.up('w')
+}
+
+const expectMoving = async (page: Page) => {
+  await expect.poll(() => hudSpeed(page), { timeout: 15_000 }).toBeGreaterThan(0)
 }
 
 const installAudioSpy = async (page: import('@playwright/test').Page) => {
@@ -151,33 +174,35 @@ test('lays out the menu choices without overlap', async ({ page }) => {
 })
 
 test('advances the tutorial after acknowledged launch telemetry changes', async ({ page }) => {
-  await page.addInitScript(() => localStorage.removeItem('neon_drift_web.tutorial.v1.complete'))
-  await goToGame(page)
+  await page.addInitScript((key) => localStorage.removeItem(key), tutorialStorageKey)
+  await goToGame(page, { tutorialComplete: false })
   await page.getByTestId('start-race').click()
   await expect(page.getByTestId('tutorial')).toContainText('Launch clean')
   await expect(page.getByTestId('tutorial')).toContainText('1/8')
   await page.getByRole('button', { name: 'OK' }).click()
-  await page.keyboard.down('z')
+  await focusRace(page)
+  await holdThrottle(page)
   await page.waitForTimeout(4200)
-  await expect.poll(() => hudSpeed(page)).toBeGreaterThan(0)
+  await expectMoving(page)
   await expect(page.getByTestId('tutorial')).toContainText('Thrust and steer')
-  await page.keyboard.up('z')
+  await releaseThrottle(page)
 })
 
 test('keeps the mobile event strip clear of the airbrake charge meter', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await goToGame(page)
   await page.getByTestId('start-race').click()
-  await page.keyboard.down('z')
+  await focusRace(page)
+  await holdThrottle(page)
   await page.keyboard.down('Shift')
   await page.waitForTimeout(4200)
-  await expect.poll(() => hudSpeed(page)).toBeGreaterThan(0)
+  await expectMoving(page)
   await expect(page.locator('.event-strip span').filter({ hasText: 'BOOST' }).first()).toBeVisible()
   await expect(page.getByTestId('mobile-race-strip')).toBeVisible()
   await expect.poll(() => elementsHaveNoVisibleOverlap(page, '.event-strip', '.airbrake-charge')).toBe(true)
   await expect.poll(() => elementsHaveNoVisibleOverlap(page, '[data-testid="mobile-race-strip"]', '.hud-race, .touch-controls, .tutorial')).toBe(true)
   await page.keyboard.up('Shift')
-  await page.keyboard.up('z')
+  await releaseThrottle(page)
 })
 
 test('drives with mobile touch throttle', async ({ page }) => {
@@ -203,15 +228,16 @@ test('starts a playable 3D race and renders canvas pixels', async ({ page }) => 
   await expect.poll(() => canvasHasNonBlankPixels(page)).toBe(true)
 
   await page.getByTestId('start-race').click()
+  await focusRace(page)
   await expect(page.getByTestId('race-toast')).toBeVisible()
-  await page.keyboard.down('z')
+  await holdThrottle(page)
   await page.keyboard.down('Shift')
   await page.keyboard.down('q')
   await page.waitForTimeout(3800)
-  await expect.poll(() => hudSpeed(page)).toBeGreaterThan(0)
+  await expectMoving(page)
   await page.keyboard.up('q')
   await page.keyboard.up('Shift')
-  await page.keyboard.up('z')
+  await releaseThrottle(page)
 
   await expect(page.getByTestId('hud')).toContainText('POWER')
   await expect.poll(() => canvasHasNonBlankPixels(page)).toBe(true)
@@ -252,23 +278,25 @@ test('starts a playable source-authored inversion track', async ({ page }) => {
   await page.getByRole('button', { name: /Inversion Ribbon/ }).click()
   await expect(page.locator('.menu-meta')).toContainText('Inversion Ribbon')
   await page.getByTestId('start-race').click()
-  await page.keyboard.down('z')
+  await focusRace(page)
+  await holdThrottle(page)
   await page.waitForTimeout(4300)
-  await expect.poll(() => hudSpeed(page)).toBeGreaterThan(0)
+  await expectMoving(page)
   await expect.poll(() => canvasHasNonBlankPixels(page)).toBe(true)
-  await page.keyboard.up('z')
+  await releaseThrottle(page)
 })
 
 test('keeps race audio synchronized with live race state', async ({ page }) => {
   await installAudioSpy(page)
   await goToGame(page)
   await page.getByTestId('start-race').click()
-  await page.keyboard.down('z')
+  await focusRace(page)
+  await holdThrottle(page)
   await page.keyboard.down('Shift')
   await page.waitForTimeout(4200)
-  await expect.poll(() => hudSpeed(page)).toBeGreaterThan(0)
+  await expectMoving(page)
   await page.keyboard.up('Shift')
-  await page.keyboard.up('z')
+  await releaseThrottle(page)
 
   const engineEvents = await page.evaluate(() => {
     const audioWindow = window as Window & typeof globalThis & { __neonAudioEvents: AudioSpyEvent[] }
