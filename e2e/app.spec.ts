@@ -173,17 +173,44 @@ test('lays out the menu choices without overlap', async ({ page }) => {
   }
 })
 
-test('advances the tutorial after acknowledged launch telemetry changes', async ({ page }) => {
-  await page.addInitScript((key) => localStorage.removeItem(key), tutorialStorageKey)
-  await goToGame(page, { tutorialComplete: false })
+test('plays s&box menu feedback cues', async ({ page }) => {
+  await installAudioSpy(page)
+  await goToGame(page)
+  await page.getByRole('button', { name: /Inversion Ribbon/ }).click()
+  await page.getByRole('button', { name: /Swift/ }).hover()
+  await page.getByRole('button', { name: /Public Game Online/ }).click()
+
+  const audioEvents = await page.evaluate(() => {
+    const audioWindow = window as Window & typeof globalThis & { __neonAudioEvents: AudioSpyEvent[] }
+    return audioWindow.__neonAudioEvents
+  })
+  const played = audioEvents.filter((event) => event.type === 'play').map((event) => event.src)
+
+  expect(played.some((src) => src.includes('menu_forward.wav'))).toBe(true)
+  expect(played.some((src) => src.includes('menu_hover.wav'))).toBe(true)
+  expect(played.some((src) => src.includes('menu_deny.wav'))).toBe(true)
+  expect(audioEvents.some((event) =>
+    event.type === 'playbackRate' &&
+    event.src.includes('menu_deny.wav') &&
+    Math.abs((event.value ?? 0) - 0.66) < 0.01,
+  )).toBe(true)
+})
+
+test('replays the tutorial on the dedicated tutorial circuit', async ({ page }) => {
+  await goToGame(page)
+  await expect(page.locator('.menu-meta')).toContainText('Tutorial Circuit')
+  await expect(page.locator('.track-option.selected .track-tag')).toContainText('Training')
+  await expect(page.getByTestId('tutorial')).toContainText('Pick a session')
+  await expect(page.getByTestId('tutorial')).toContainText('1/9')
   await page.getByTestId('start-race').click()
   await expect(page.getByTestId('tutorial')).toContainText('Launch clean')
-  await expect(page.getByTestId('tutorial')).toContainText('1/8')
-  await page.getByRole('button', { name: 'OK' }).click()
+  await expect(page.getByTestId('tutorial')).toContainText('2/9')
   await focusRace(page)
   await holdThrottle(page)
   await page.waitForTimeout(4200)
   await expectMoving(page)
+  await page.getByRole('button', { name: 'OK' }).click()
+  await focusRace(page)
   await expect(page.getByTestId('tutorial')).toContainText('Thrust and steer')
   await releaseThrottle(page)
 })
@@ -195,9 +222,10 @@ test('keeps the mobile event strip clear of the airbrake charge meter', async ({
   await focusRace(page)
   await holdThrottle(page)
   await page.keyboard.down('Shift')
-  await page.waitForTimeout(4200)
   await expectMoving(page)
-  await expect(page.locator('.event-strip span').filter({ hasText: 'BOOST' }).first()).toBeVisible()
+  await expect.poll(async () => (
+    await page.locator('.event-strip span').allTextContents()
+  ).includes('BOOST'), { timeout: 15_000 }).toBe(true)
   await expect(page.getByTestId('mobile-race-strip')).toBeVisible()
   await expect.poll(() => elementsHaveNoVisibleOverlap(page, '.event-strip', '.airbrake-charge')).toBe(true)
   await expect.poll(() => elementsHaveNoVisibleOverlap(page, '[data-testid="mobile-race-strip"]', '.hud-race, .touch-controls, .tutorial')).toBe(true)
@@ -271,6 +299,39 @@ test('starts a playable 3D race and renders canvas pixels', async ({ page }) => 
     }).__NEON_RENDER_STATS
     return (stats?.padMarkerCount ?? 0) > 0 && (stats?.trackEnvironmentInstances ?? 0) > 80
   })).toBe(true)
+  await expect.poll(() => page.evaluate(() => {
+    const stats = (window as Window & typeof globalThis & {
+      __NEON_RENDER_STATS?: {
+        sourceTrackGateModelCount?: number
+        sourceTrackGatePartModelCount?: number
+        sourceTrackPadModelCount?: number
+        sourceTrackStartLineModelCount?: number
+        sourceTrackSlabModelCount?: number
+        sourceTrackRailModelCount?: number
+        sourceTrackSkylineTowerModelCount?: number
+        sourceTrackKitLoaded?: boolean
+      }
+    }).__NEON_RENDER_STATS
+    return {
+      loaded: stats?.sourceTrackKitLoaded ?? false,
+      gates: stats?.sourceTrackGateModelCount ?? 0,
+      gateParts: stats?.sourceTrackGatePartModelCount ?? 0,
+      pads: stats?.sourceTrackPadModelCount ?? 0,
+      startLine: stats?.sourceTrackStartLineModelCount ?? 0,
+      slabs: stats?.sourceTrackSlabModelCount ?? 0,
+      rails: stats?.sourceTrackRailModelCount ?? 0,
+      towers: stats?.sourceTrackSkylineTowerModelCount ?? 0,
+    }
+  }), { timeout: 15_000 }).toEqual({
+    loaded: true,
+    gates: 8,
+    gateParts: 24,
+    pads: 8,
+    startLine: 1,
+    slabs: 384,
+    rails: 768,
+    towers: 0,
+  })
 })
 
 test('starts a playable source-authored inversion track', async ({ page }) => {
@@ -283,6 +344,27 @@ test('starts a playable source-authored inversion track', async ({ page }) => {
   await page.waitForTimeout(4300)
   await expectMoving(page)
   await expect.poll(() => canvasHasNonBlankPixels(page)).toBe(true)
+  await expect.poll(() => page.evaluate(() => {
+    const stats = (window as Window & typeof globalThis & {
+      __NEON_RENDER_STATS?: {
+        sourceTrackKitLoaded?: boolean
+        sourceTrackSlabModelCount?: number
+        sourceTrackRailModelCount?: number
+        sourceTrackSkylineTowerModelCount?: number
+      }
+    }).__NEON_RENDER_STATS
+    return {
+      loaded: stats?.sourceTrackKitLoaded ?? false,
+      slabs: stats?.sourceTrackSlabModelCount ?? 0,
+      rails: stats?.sourceTrackRailModelCount ?? 0,
+      towers: stats?.sourceTrackSkylineTowerModelCount ?? 0,
+    }
+  }), { timeout: 15_000 }).toEqual({
+    loaded: true,
+    slabs: 640,
+    rails: 1280,
+    towers: 34,
+  })
   await releaseThrottle(page)
 })
 

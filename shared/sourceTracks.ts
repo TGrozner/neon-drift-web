@@ -15,7 +15,41 @@ export type SourceTrackSpec = {
   nodes: SourceTrackNode[]
 }
 
+const makeTutorialCircuitNodes = (): SourceTrackNode[] => {
+  const width = 1500
+  const radius = 4200
+  const straight = 24000
+  const nodes: SourceTrackNode[] = []
+  const add = (x: number, y: number, bank = 0) => nodes.push({ x, y, z: 0, width, bank })
+
+  for (const x of [0, 6000, 12000, 18000, straight]) add(x, -radius)
+  for (let step = 1; step <= 8; step += 1) {
+    const angle = -Math.PI / 2 + (Math.PI * step) / 8
+    add(straight + Math.cos(angle) * radius, Math.sin(angle) * radius, 8)
+  }
+  for (const x of [18000, 12000, 6000, 0, -6000, -12000, -18000, -straight]) add(x, radius)
+  for (let step = 1; step <= 8; step += 1) {
+    const angle = Math.PI / 2 + (Math.PI * step) / 8
+    add(-straight + Math.cos(angle) * radius, Math.sin(angle) * radius, -8)
+  }
+  for (const x of [-18000, -12000, -6000]) add(x, -radius)
+  return nodes
+}
+
 export const SOURCE_TRACK_SPECS: SourceTrackSpec[] = [
+  {
+    id: 'tutorial-circuit',
+    name: 'Tutorial Circuit',
+    description: 'Purpose-built training loop with a long launch straight, wide turns, pads, and readable gates.',
+    subdivisions: 12,
+    footprintMultiplier: 1,
+    heightMultiplier: 1,
+    widthMultiplier: 3,
+    bankMultiplier: 1,
+    allowInvertedFrame: false,
+    maxWidth: 4300,
+    nodes: makeTutorialCircuitNodes(),
+  },
   {
     id: 'neon-oval',
     name: 'Neon Oval',
@@ -306,7 +340,7 @@ export const SOURCE_TRACK_SPECS: SourceTrackSpec[] = [
     id: 'looping-inferno',
     name: 'Looping Inferno',
     description: 'Hot Wheels-style launch, inversion crest, dive, and counter-bank wallride chain.',
-    subdivisions: 64,
+    subdivisions: 32,
     footprintMultiplier: 1.14,
     heightMultiplier: 1,
     widthMultiplier: 2.45,

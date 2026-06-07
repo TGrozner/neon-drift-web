@@ -1,8 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { RaceState } from '../../shared/race'
-import { NeonAudioEngine } from '../audio/neonAudio'
+import { NeonAudioEngine, type MenuAudioCue } from '../audio/neonAudio'
 
-export const useNeonAudio = (race: RaceState): void => {
+export type NeonAudioControls = {
+  playMenuCue: (cue: MenuAudioCue) => void
+}
+
+export const useNeonAudio = (race: RaceState): NeonAudioControls => {
   const [engine] = useState(() => new NeonAudioEngine())
 
   useEffect(() => {
@@ -19,4 +23,10 @@ export const useNeonAudio = (race: RaceState): void => {
   useEffect(() => {
     engine.sync(race)
   })
+
+  const playMenuCue = useCallback((cue: MenuAudioCue) => {
+    engine.playMenuCue(cue)
+  }, [engine])
+
+  return { playMenuCue }
 }

@@ -221,12 +221,13 @@
 }
 
 .menu-panel {
-  width: min(560px, calc(100vw - 48px));
+  box-sizing: border-box;
+  width: min(700px, calc(100vw - 72px));
   max-height: calc(100svh - 72px);
   overflow: auto;
   border: 1px solid rgba(108, 232, 255, 0.28);
   background: rgba(5, 6, 11, 0.78);
-  padding: 24px;
+  padding: 20px;
   box-shadow: 0 20px 64px rgba(0, 0, 0, 0.48);
 }
 
@@ -238,14 +239,14 @@
 }
 
 .menu-meta {
-  margin: 8px 0 22px;
+  margin: 8px 0 16px;
   color: rgba(238, 247, 255, 0.68);
 }
 
 .menu-section {
   display: grid;
-  gap: 10px;
-  margin-top: 18px;
+  gap: 8px;
+  margin-top: 14px;
 }
 
 .ship-options {
@@ -256,6 +257,7 @@
 
 .ship-card,
 .track-option,
+.mode-option,
 .start-button,
 .results-actions button {
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -265,11 +267,11 @@
 }
 
 .ship-card {
-  min-height: 116px;
-  padding: 12px;
+  min-height: 96px;
+  padding: 10px;
   display: grid;
   align-content: start;
-  gap: 8px;
+  gap: 6px;
   text-align: left;
 }
 
@@ -280,7 +282,8 @@
 
 .ship-card small,
 .track-card small,
-.track-option small {
+.track-option small,
+.mode-option small {
   color: rgba(238, 247, 255, 0.62);
   line-height: 1.25;
   overflow-wrap: anywhere;
@@ -301,14 +304,30 @@
 
 .track-options {
   display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mode-options {
+  display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
 .track-option {
   min-width: 0;
-  min-height: 88px;
-  padding: 10px;
+  min-height: 78px;
+  padding: 8px;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  text-align: left;
+}
+
+.mode-option {
+  min-width: 0;
+  min-height: 66px;
+  padding: 8px;
   display: grid;
   align-content: start;
   gap: 6px;
@@ -320,13 +339,36 @@
   line-height: 1.08;
 }
 
-.track-option small {
+.track-option.training-track {
+  border-color: rgba(108, 232, 255, 0.5);
+}
+
+.track-tag {
+  width: fit-content;
+  padding: 2px 6px;
+  border: 1px solid rgba(108, 232, 255, 0.32);
+  background: rgba(108, 232, 255, 0.12);
+  color: #6ce8ff;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.track-option small,
+.mode-option small {
   font-size: 11px;
 }
 
-.track-option.selected {
+.track-option.selected,
+.mode-option.selected {
   border-color: #ffbf4a;
   background: rgba(255, 191, 74, 0.12);
+}
+
+.mode-option.unavailable {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(238, 247, 255, 0.56);
 }
 
 .readability {
@@ -477,8 +519,8 @@
 
 .start-button {
   width: 100%;
-  height: 56px;
-  margin-top: 22px;
+  height: 52px;
+  margin-top: 16px;
   position: sticky;
   bottom: 0;
   z-index: 2;
@@ -489,6 +531,7 @@
 
 .tutorial {
   position: absolute;
+  z-index: 4;
   right: 24px;
   bottom: 128px;
   width: min(320px, calc(100vw - 48px));
@@ -496,6 +539,7 @@
   border: 1px solid rgba(108, 232, 255, 0.24);
   background: rgba(3, 7, 14, 0.72);
   color: rgba(238, 247, 255, 0.9);
+  pointer-events: none;
 }
 
 .tutorial-counter {
@@ -509,12 +553,34 @@
   color: rgba(238, 247, 255, 0.7);
 }
 
+.tutorial small {
+  display: block;
+  margin-top: 8px;
+  color: rgba(108, 232, 255, 0.78);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.tutorial-progress {
+  height: 4px;
+  margin-top: 10px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.tutorial-progress span {
+  display: block;
+  height: 100%;
+  background: #6ce8ff;
+}
+
 .tutorial button {
   margin-top: 10px;
   border: 1px solid rgba(108, 232, 255, 0.32);
   background: rgba(108, 232, 255, 0.1);
   color: #eef7ff;
   padding: 8px 14px;
+  pointer-events: auto;
 }
 
 .touch-controls {
@@ -604,6 +670,10 @@
   }
 
   .track-options {
+    grid-template-columns: 1fr;
+  }
+
+  .mode-options {
     grid-template-columns: 1fr;
   }
 

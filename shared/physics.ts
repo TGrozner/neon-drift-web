@@ -106,6 +106,7 @@ export type Vehicle = {
   gatePulse: number
   lapPulse: number
   rivalPassPulse: number
+  knockoutRewardPulse: number
   telemetry: VehicleTelemetry
 }
 
@@ -181,6 +182,7 @@ export const createVehicle = (
   gatePulse: 0,
   lapPulse: 0,
   rivalPassPulse: 0,
+  knockoutRewardPulse: 0,
   telemetry: {
     speedRatio: 0,
     powerCritical: false,
@@ -454,6 +456,7 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
   vehicle.gatePulse = decayPulse(vehicle.gatePulse, dt, 0.45)
   vehicle.lapPulse = decayPulse(vehicle.lapPulse, dt, 1.15)
   vehicle.rivalPassPulse = decayPulse(vehicle.rivalPassPulse, dt, 0.75)
+  vehicle.knockoutRewardPulse = decayPulse(vehicle.knockoutRewardPulse, dt, 0.9)
   vehicle.airbrakeExitCooldown += dt
   vehicle.railDamageCooldown = Math.max(0, vehicle.railDamageCooldown - dt)
   vehicle.crashOutGraceRemaining = Math.max(0, vehicle.crashOutGraceRemaining - dt)

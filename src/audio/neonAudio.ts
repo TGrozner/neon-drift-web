@@ -17,6 +17,7 @@ type Cue =
   | 'power_damage'
   | 'power_danger'
   | 'rival_pass'
+  | 'knockout_reward'
   | 'crash_out'
   | 'crash_launch'
   | 'gate'
@@ -25,9 +26,15 @@ type Cue =
   | 'finish'
   | 'power_critical'
   | 'wrong_way'
+  | 'menu_forward'
+  | 'menu_back'
+  | 'menu_deny'
+  | 'menu_hover'
   | 'music_menu'
   | 'music_race'
   | 'engine_loop'
+
+export type MenuAudioCue = 'forward' | 'back' | 'deny' | 'hover'
 
 type Snapshot = {
   phase: RacePhase
@@ -45,6 +52,7 @@ type Snapshot = {
   powerDamagePulse: number
   packBumpPulse: number
   rivalPassPulse: number
+  knockoutRewardPulse: number
   powerCritical: boolean
   offTrack: boolean
   wrongWay: boolean
@@ -67,6 +75,7 @@ const cuePaths: Record<Cue, string> = {
   power_damage: 'power_damage.wav',
   power_danger: 'power_danger.wav',
   rival_pass: 'rival_pass.wav',
+  knockout_reward: 'knockout_reward.wav',
   crash_out: 'crash_out.wav',
   crash_launch: 'crash_launch.wav',
   gate: 'gate.wav',
@@ -75,6 +84,10 @@ const cuePaths: Record<Cue, string> = {
   finish: 'finish.wav',
   power_critical: 'power_critical.wav',
   wrong_way: 'wrong_way.wav',
+  menu_forward: 'menu_forward.wav',
+  menu_back: 'menu_back.wav',
+  menu_deny: 'menu_deny.wav',
+  menu_hover: 'menu_hover.wav',
   music_menu: 'music_menu.wav',
   music_race: 'music_race.wav',
   engine_loop: 'engine_loop.wav',
@@ -95,6 +108,7 @@ const oneShotVolume: Partial<Record<Cue, number>> = {
   power_damage: 0.5,
   power_danger: 0.62,
   rival_pass: 0.5,
+  knockout_reward: 0.44,
   crash_out: 0.72,
   crash_launch: 0.54,
   gate: 0.38,
@@ -103,6 +117,42 @@ const oneShotVolume: Partial<Record<Cue, number>> = {
   finish: 0.66,
   power_critical: 0.42,
   wrong_way: 0.56,
+  menu_forward: 0.68,
+  menu_back: 0.6,
+  menu_deny: 0.72,
+  menu_hover: 0.38,
+}
+
+const oneShotPlaybackRate: Partial<Record<Cue, number>> = {
+  ready: 0.78,
+  countdown_tick: 0.82,
+  go: 0.92,
+  boost_start: 1.02,
+  speed_pad: 0.98,
+  recharge_pad: 0.84,
+  airbrake_exit: 0.9,
+  slipstream_surge: 0.94,
+  rival_pass: 0.9,
+  knockout_reward: 0.88,
+  crash_out: 0.62,
+  crash_launch: 0.9,
+  gate: 0.8,
+  lap: 0.88,
+  final_lap: 0.86,
+  finish: 0.9,
+  power_critical: 0.6,
+  wrong_way: 0.58,
+  menu_forward: 0.9,
+  menu_back: 0.78,
+  menu_deny: 0.66,
+  menu_hover: 0.88,
+}
+
+const menuCueMap: Record<MenuAudioCue, Cue> = {
+  forward: 'menu_forward',
+  back: 'menu_back',
+  deny: 'menu_deny',
+  hover: 'menu_hover',
 }
 
 const crossed = (current: number, previous: number | undefined, threshold = 0.05): boolean =>
@@ -135,6 +185,10 @@ export class NeonAudioEngine {
     this.stopLoop(this.musicLoop)
     this.engineLoop = null
     this.musicLoop = null
+  }
+
+  playMenuCue(cue: MenuAudioCue): void {
+    this.play(menuCueMap[cue])
   }
 
   sync(race: RaceState, elapsedSeconds?: number): void {
@@ -172,6 +226,7 @@ export class NeonAudioEngine {
       powerDamagePulse: player.powerDamagePulse,
       packBumpPulse: player.packBumpPulse,
       rivalPassPulse: player.rivalPassPulse,
+      knockoutRewardPulse: player.knockoutRewardPulse,
       powerCritical: player.telemetry.powerCritical,
       offTrack: player.telemetry.offTrack,
       wrongWay: player.telemetry.wrongWay,
@@ -183,6 +238,7 @@ export class NeonAudioEngine {
       if (current.phase === 'warmup') this.play('ready')
       if (current.phase === 'racing') this.play('go')
       if (current.phase === 'finished') this.play('finish')
+      if (current.phase === 'menu' && previous.phase !== 'menu') this.play('menu_back', 0.25, 0.78)
     }
 
     if (current.phase === 'countdown' && current.countdown !== previous.countdown) {
@@ -204,6 +260,7 @@ export class NeonAudioEngine {
     if (crossed(current.powerDamagePulse, previous.powerDamagePulse)) this.play('power_damage')
     if (crossed(current.packBumpPulse, previous.packBumpPulse)) this.play('ship_bump')
     if (crossed(current.rivalPassPulse, previous.rivalPassPulse)) this.play('rival_pass')
+    if (crossed(current.knockoutRewardPulse, previous.knockoutRewardPulse)) this.play('knockout_reward')
     if (current.powerCritical && !previous.powerCritical) this.play('power_danger')
     if (current.powerCritical && this.powerCriticalCooldown <= 0) {
       this.play('power_critical')
@@ -264,10 +321,11 @@ export class NeonAudioEngine {
     audio.currentTime = 0
   }
 
-  private play(cue: Cue): void {
+  private play(cue: Cue, volumeOverride?: number, playbackRateOverride?: number): void {
     if (!this.unlocked) return
     const audio = new Audio(audioPath(cue))
-    audio.volume = oneShotVolume[cue] ?? 0.5
+    audio.volume = volumeOverride ?? oneShotVolume[cue] ?? 0.5
+    audio.playbackRate = playbackRateOverride ?? oneShotPlaybackRate[cue] ?? 1
     tryPlay(audio)
   }
 

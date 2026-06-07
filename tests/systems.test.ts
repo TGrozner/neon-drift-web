@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createBotBrain, getBotInput } from '../shared/bot'
-import { RACE, SHIP_PROFILES, SLIPSTREAM } from '../shared/constants'
+import { FIXED_DT, RACE, SHIP_PROFILES, SLIPSTREAM } from '../shared/constants'
 import { cross3, dot3 } from '../shared/math'
 import { EMPTY_INPUT, createVehicle } from '../shared/physics'
 import { isInsidePad, triggerTrackPads } from '../shared/pads'
 import { getPlayer, startRace, updateRace, updateRivals, updateStandings } from '../shared/race'
+import { SOURCE_TRACK_SPECS } from '../shared/sourceTracks'
 import {
   createSlipstreamState,
   publishSlipstream,
@@ -39,11 +40,15 @@ describe('track and pads', () => {
   })
 
   it('builds every source-authored track with finite samples and valid pads', () => {
-    expect(TRACKS).toHaveLength(9)
+    expect(TRACKS).toHaveLength(10)
+    expect(TRACKS[0].id).toBe('tutorial-circuit')
     for (const track of TRACKS) {
+      const sourceSpec = SOURCE_TRACK_SPECS.find((spec) => spec.id === track.id)
       expect(track.totalLength).toBeGreaterThan(100)
       expect(track.gates).toHaveLength(8)
       expect(track.startGrid).toHaveLength(8)
+      expect(track.visualSegments).toHaveLength((sourceSpec?.nodes.length ?? 0) * (sourceSpec?.subdivisions ?? 0))
+      expect(track.skylineTowers).toHaveLength(track.id === 'tutorial-circuit' || track.id === 'neon-oval' ? 0 : 34)
       for (let i = 0; i < 12; i += 1) {
         const profile = track.sample((track.totalLength * i) / 12)
         expect(Number.isFinite(profile.center.x)).toBe(true)
@@ -59,6 +64,15 @@ describe('track and pads', () => {
         expect(isInsidePad(track, pad, pad.distance, pad.lane)).toBe(true)
       }
     }
+  })
+
+  it('makes the tutorial circuit wider and less crowded than the baseline oval', () => {
+    const tutorial = TRACKS.find((track) => track.id === 'tutorial-circuit')
+
+    expect(tutorial?.width).toBeGreaterThan(NEON_OVAL.width)
+    expect(tutorial?.startGrid[4].back).toBeGreaterThan(NEON_OVAL.startGrid[4].back)
+    expect(tutorial?.startGrid[0].lane).toBe(0)
+    expect(Math.abs(tutorial?.startGrid[3].lane ?? 0)).toBeGreaterThan(Math.abs(NEON_OVAL.startGrid[3].lane))
   })
 
   it('keeps source-authored tracks inside smooth playable envelopes', () => {
@@ -213,13 +227,47 @@ describe('race flow', () => {
     expect(getPlayer(race).lane).toBe(0)
   })
 
+  it('matches the s&box eight-participant launch grid', () => {
+    const race = startRace('balanced')
+
+    expect(race.vehicles).toHaveLength(8)
+    expect(race.vehicles.map((vehicle) => vehicle.name)).toEqual(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8'])
+    expect(race.vehicles.map((vehicle) => vehicle.profileId)).toEqual([
+      'balanced',
+      'swift',
+      'heavy',
+      'balanced',
+      'swift',
+      'balanced',
+      'heavy',
+      'swift',
+    ])
+  })
+
+  it('uses the s&box Looping Inferno subdivision count', () => {
+    expect(SOURCE_TRACK_SPECS.find((track) => track.id === 'looping-inferno')?.subdivisions).toBe(32)
+  })
+
   it('moves from warmup to countdown to racing and applies launch boost', () => {
     const race = startRace('balanced')
+    expect(race.track.id).toBe('tutorial-circuit')
     updateRace(race, { throttle: 1, steer: 0, boost: false, airbrake: false, reset: false }, 0.5)
     expect(race.phase).toBe('countdown')
     updateRace(race, { throttle: 1, steer: 0, boost: false, airbrake: false, reset: false }, 3.1)
     expect(race.phase).toBe('racing')
     expect(race.vehicles[0].forwardSpeed).toBeGreaterThan(0)
+  })
+
+  it('keeps the tutorial boost drill forgiving through the first bend', () => {
+    const race = startRace('balanced', 'tutorial-circuit')
+    const input = { throttle: 1, steer: 0, boost: true, airbrake: false, reset: false }
+
+    for (let time = 0; time < 7; time += FIXED_DT) {
+      updateRace(race, input, FIXED_DT)
+    }
+
+    expect(getPlayer(race).crashOutCount).toBe(0)
+    expect(getPlayer(race).power).toBeGreaterThan(0.1)
   })
 
   it('expires non-critical race toasts after a short readable window', () => {
@@ -307,7 +355,9 @@ describe('race flow', () => {
 
     expect(rival.crashOutCount).toBe(1)
     expect(player.power).toBeGreaterThan(0.45)
-    expect(race.lastToast).toBe('RIVAL DOWN')
+    expect(player.knockoutRewardPulse).toBe(1)
+    expect(player.rivalPassPulse).toBe(0)
+    expect(race.lastToast).toBe('KO ENERGY')
   })
 
   it('separates exact same-lane pack overlaps deterministically', () => {
@@ -366,12 +416,14 @@ describe('race flow', () => {
     const race = startRace('balanced')
     race.phase = 'racing'
     const distances: Record<string, number> = {
-      'bot-1': 120,
-      'bot-2': 105,
-      'bot-3': 90,
-      'bot-4': 75,
-      player: 60,
-      'bot-5': 45,
+      'bot-1': 8,
+      'bot-2': 7,
+      'bot-3': 6,
+      'bot-4': 5,
+      player: 4,
+      'bot-5': 3,
+      'bot-6': 2,
+      'bot-7': 1,
     }
     for (const vehicle of race.vehicles) {
       vehicle.distance = distances[vehicle.id] ?? 0
@@ -387,24 +439,24 @@ describe('race flow', () => {
     expect(rivalIds).toContain('bot-4')
     expect(rivalIds).toContain('bot-5')
     expect(rivalIds).not.toContain('bot-1')
-    expect(race.rivalGaps['bot-4']).toBeCloseTo(15)
-    expect(race.rivalGaps['bot-5']).toBeCloseTo(-15)
+    expect(race.rivalGaps['bot-4']).toBeCloseTo(1)
+    expect(race.rivalGaps['bot-5']).toBeCloseTo(-1)
   })
 
   it('keeps the local player visible in compact HUD standings', () => {
     const race = startRace('balanced')
     race.phase = 'racing'
     for (const [index, vehicle] of race.vehicles.entries()) {
-      vehicle.distance = 120 - index * 15
+      vehicle.distance = 16 - index * 2
     }
-    getPlayer(race).distance = 55
+    getPlayer(race).distance = 5
     updateStandings(race)
 
     const rows = standingsForHud(race.standings, race.playerId)
 
     expect(rows).toHaveLength(4)
     expect(rows.at(-1)?.vehicle.id).toBe(race.playerId)
-    expect(rows.at(-1)?.position).toBe(5)
+    expect(rows.at(-1)?.position).toBe(6)
   })
 })
 
@@ -480,6 +532,145 @@ describe('browser integration helpers', () => {
     engine.dispose()
 
     expect(audioEvents.filter((event) => event.src.endsWith('/finish.wav'))).toHaveLength(1)
+  })
+
+  it('plays s&box menu feedback cues on explicit menu commands', () => {
+    const audioEvents: { type: 'play' | 'playbackRate'; src: string; value?: number }[] = []
+
+    class FakeAudio {
+      readonly src: string
+      loop = false
+      currentTime = 0
+      volume = 1
+      private currentPlaybackRate = 1
+
+      constructor(src = '') {
+        this.src = src
+      }
+
+      get playbackRate() {
+        return this.currentPlaybackRate
+      }
+
+      set playbackRate(value: number) {
+        this.currentPlaybackRate = value
+        audioEvents.push({ type: 'playbackRate', src: this.src, value })
+      }
+
+      play() {
+        audioEvents.push({ type: 'play', src: this.src })
+        return Promise.resolve()
+      }
+
+      pause() {
+        return undefined
+      }
+    }
+
+    vi.stubGlobal('Audio', FakeAudio)
+    const engine = new NeonAudioEngine()
+    engine.unlock()
+
+    engine.playMenuCue('forward')
+    engine.playMenuCue('back')
+    engine.playMenuCue('hover')
+    engine.playMenuCue('deny')
+    engine.dispose()
+
+    expect(audioEvents.filter((event) => event.type === 'play').map((event) => event.src.split('/').at(-1))).toEqual([
+      'menu_forward.wav',
+      'menu_back.wav',
+      'menu_hover.wav',
+      'menu_deny.wav',
+    ])
+    expect(audioEvents.find((event) => event.src.endsWith('/menu_deny.wav') && event.type === 'playbackRate')?.value).toBeCloseTo(0.66)
+  })
+
+  it('plays a low-volume menu back cue when returning to menu', () => {
+    const audioEvents: { type: 'play' | 'volume'; src: string; value?: number }[] = []
+
+    class FakeAudio {
+      readonly src: string
+      loop = false
+      currentTime = 0
+      playbackRate = 1
+      private currentVolume = 1
+
+      constructor(src = '') {
+        this.src = src
+      }
+
+      get volume() {
+        return this.currentVolume
+      }
+
+      set volume(value: number) {
+        this.currentVolume = value
+        audioEvents.push({ type: 'volume', src: this.src, value })
+      }
+
+      play() {
+        audioEvents.push({ type: 'play', src: this.src })
+        return Promise.resolve()
+      }
+
+      pause() {
+        return undefined
+      }
+    }
+
+    vi.stubGlobal('Audio', FakeAudio)
+    const race = startRace('balanced')
+    race.phase = 'racing'
+    const engine = new NeonAudioEngine()
+    engine.unlock()
+    engine.sync(race)
+
+    race.phase = 'menu'
+    engine.sync(race, 0)
+    engine.dispose()
+
+    expect(audioEvents.some((event) => event.type === 'play' && event.src.endsWith('/menu_back.wav'))).toBe(true)
+    expect(audioEvents.find((event) => event.src.endsWith('/menu_back.wav') && event.type === 'volume')?.value).toBeCloseTo(0.25)
+  })
+
+  it('plays the knockout reward cue separately from rival pass', () => {
+    const audioEvents: { type: 'play'; src: string }[] = []
+
+    class FakeAudio {
+      readonly src: string
+      loop = false
+      currentTime = 0
+      volume = 1
+      playbackRate = 1
+
+      constructor(src = '') {
+        this.src = src
+      }
+
+      play() {
+        audioEvents.push({ type: 'play', src: this.src })
+        return Promise.resolve()
+      }
+
+      pause() {
+        return undefined
+      }
+    }
+
+    vi.stubGlobal('Audio', FakeAudio)
+    const race = startRace('balanced')
+    race.phase = 'racing'
+    const engine = new NeonAudioEngine()
+    engine.unlock()
+    engine.sync(race)
+
+    getPlayer(race).knockoutRewardPulse = 1
+    engine.sync(race, 0)
+    engine.dispose()
+
+    expect(audioEvents.some((event) => event.src.endsWith('/knockout_reward.wav'))).toBe(true)
+    expect(audioEvents.some((event) => event.src.endsWith('/rival_pass.wav'))).toBe(false)
   })
 
   it('decrements repeated audio cue cooldowns by elapsed sync time', () => {

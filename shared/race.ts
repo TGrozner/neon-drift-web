@@ -44,12 +44,12 @@ export type RaceState = {
   toastAge: number
 }
 
-const botNames = ['Vela', 'Ion', 'Pulse', 'Nova', 'Rook']
-const botProfiles: ShipProfileId[] = ['swift', 'balanced', 'heavy', 'balanced', 'swift']
+const botNames = ['P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8']
+const botProfiles: ShipProfileId[] = ['swift', 'heavy', 'balanced', 'swift', 'balanced', 'heavy', 'swift']
 
 export const createRaceState = (
   profileId: ShipProfileId = 'balanced',
-  trackId: TrackId = 'neon-oval',
+  trackId: TrackId = 'tutorial-circuit',
 ): RaceState => {
   const track = trackById(trackId)
   const vehicles: Vehicle[] = []
@@ -59,7 +59,7 @@ export const createRaceState = (
   vehicles.push(
     createVehicle(
       'player',
-      'You',
+      'P1',
       profileId,
       true,
       track.totalLength - playerSlot.back,
@@ -106,7 +106,7 @@ export const createRaceState = (
 export const getPlayer = (race: RaceState): Vehicle =>
   race.vehicles.find((vehicle) => vehicle.id === race.playerId) ?? race.vehicles[0]
 
-export const startRace = (profileId: ShipProfileId, trackId: TrackId = 'neon-oval'): RaceState => {
+export const startRace = (profileId: ShipProfileId, trackId: TrackId = 'tutorial-circuit'): RaceState => {
   const fresh = createRaceState(profileId, trackId)
   fresh.phase = 'warmup'
   setToast(fresh, 'READY')
@@ -326,8 +326,8 @@ const applyRivalCrashOutReward = (
     const beforeOther = beforeProgress[other.id] ?? progressFor(race, other)
     if (Math.abs(beforeOther - beforePlayer) > maxRewardGap) continue
     player.power = Math.min(1, player.power + RACE.rivalCrashOutPowerReward)
-    player.rivalPassPulse = 1
-    setToast(race, 'RIVAL DOWN')
+    player.knockoutRewardPulse = 1
+    setToast(race, 'KO ENERGY')
     return
   }
 }

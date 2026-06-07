@@ -26,7 +26,7 @@ export function Hud({ race }: Props) {
   const nextGateDistance = gapToNext(race, player)
   const nextUrgency = Math.max(0, Math.min(1, 1 - nextGateDistance / 180))
   const lineSafety = Math.max(0, Math.min(1, 1 - Math.max(player.telemetry.offTrack ? 1 : 0, player.telemetry.railPressure)))
-  const draft = Math.max(player.slipstreamPulse, player.rivalPassPulse)
+  const draft = Math.max(player.slipstreamPulse, player.rivalPassPulse, player.knockoutRewardPulse)
   const rivals = race.rivals.length > 0
     ? race.rivals
     : race.standings.filter((vehicle) => vehicle.id !== player.id && !vehicle.finished).slice(0, 3)
@@ -39,7 +39,8 @@ export function Hud({ race }: Props) {
       player.speedPadPulse * 0.42 +
       player.airbrakeExitPulse * 0.34 +
       player.slipstreamPulse * 0.18 +
-      player.rivalPassPulse * 0.22,
+      player.rivalPassPulse * 0.22 +
+      player.knockoutRewardPulse * 0.24,
   )
   const raceTime = race.phase === 'racing' || race.phase === 'finished'
     ? race.raceTime + player.timePenalty
@@ -138,6 +139,7 @@ export function Hud({ race }: Props) {
         {player.airbrakeExitPulse > 0 && <span>EXIT BOOST</span>}
         {player.isBoosting && <span>BOOST</span>}
         {player.slipstreamPulse > 0.05 && <span>DRAFT</span>}
+        {player.knockoutRewardPulse > 0.05 && <span>KO ENERGY</span>}
         {player.packBumpPulse > 0.05 && <span>CONTACT</span>}
         {player.crashOutPulse > 0 && <span className="warning">CRASH OUT</span>}
       </div>

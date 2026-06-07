@@ -21,8 +21,23 @@ const shipModels = {
   swift: publicAsset('models/neon_drift/ships/prototype_swift.glb'),
   heavy: publicAsset('models/neon_drift/ships/prototype_heavy.glb'),
 } as const
+
+const trackKitModels = {
+  trackSlab: publicAsset('models/neon_drift/tracks/prototype_kit/track_slab.glb'),
+  trackRail: publicAsset('models/neon_drift/tracks/prototype_kit/track_rail.glb'),
+  skylineTower: publicAsset('models/neon_drift/tracks/prototype_kit/skyline_tower.glb'),
+  gatePost: publicAsset('models/neon_drift/tracks/prototype_kit/gate_post.glb'),
+  gateBeam: publicAsset('models/neon_drift/tracks/prototype_kit/gate_beam.glb'),
+  speedPad: publicAsset('models/neon_drift/tracks/prototype_kit/speed_pad.glb'),
+  rechargePad: publicAsset('models/neon_drift/tracks/prototype_kit/recharge_pad.glb'),
+  startLine: publicAsset('models/neon_drift/tracks/prototype_kit/start_line.glb'),
+} as const
+
+type TrackKitModelId = keyof typeof trackKitModels
+
 const RENDERED_SLIPSTREAM_SEGMENTS = 24
 const ENABLE_SOURCE_SHIP_MODELS = true
+const ENABLE_SOURCE_TRACK_KIT_MODELS = true
 
 const loadModel = (url: string): Promise<THREE.Group> => {
   const cached = modelCache.get(url)
@@ -32,6 +47,15 @@ const loadModel = (url: string): Promise<THREE.Group> => {
   })
   modelCache.set(url, promise)
   return promise
+}
+
+const preloadSourceModels = (): void => {
+  if (ENABLE_SOURCE_SHIP_MODELS) {
+    for (const url of Object.values(shipModels)) void loadModel(url).catch(() => undefined)
+  }
+  if (ENABLE_SOURCE_TRACK_KIT_MODELS) {
+    for (const url of Object.values(trackKitModels)) void loadModel(url).catch(() => undefined)
+  }
 }
 
 const cloneModel = (template: THREE.Group): THREE.Group => {
@@ -77,6 +101,20 @@ type GatePortal = {
   lineMaterial: THREE.LineBasicMaterial
 }
 
+type TrackKitBasisInstance = {
+  position: Vec3
+  profile: { tangent: Vec3; up: Vec3; right: Vec3 }
+  scale: THREE.Vector3
+  color?: THREE.ColorRepresentation
+}
+
+type TrackKitMatrixInstance = {
+  matrix: THREE.Matrix4
+  color?: THREE.ColorRepresentation
+}
+
+type TrackKitInstance = TrackKitBasisInstance | TrackKitMatrixInstance
+
 type NeonRenderStats = {
   calls: number
   triangles: number
@@ -85,6 +123,14 @@ type NeonRenderStats = {
   gatePortalCount: number
   padMarkerCount: number
   trackEnvironmentInstances: number
+  sourceTrackGateModelCount: number
+  sourceTrackGatePartModelCount: number
+  sourceTrackPadModelCount: number
+  sourceTrackStartLineModelCount: number
+  sourceTrackSlabModelCount: number
+  sourceTrackRailModelCount: number
+  sourceTrackSkylineTowerModelCount: number
+  sourceTrackKitLoaded: boolean
 }
 
 export class NeonRenderer {
@@ -109,6 +155,20 @@ export class NeonRenderer {
   private trackId = ''
   private padMarkerCount = 0
   private trackEnvironmentInstances = 0
+  private sourceTrackGateModelCount = 0
+  private sourceTrackGatePartModelCount = 0
+  private sourceTrackPadModelCount = 0
+  private sourceTrackStartLineModelCount = 0
+  private sourceTrackSlabModelCount = 0
+  private sourceTrackRailModelCount = 0
+  private sourceTrackSkylineTowerModelCount = 0
+  private expectedSourceTrackGateModelCount = 0
+  private expectedSourceTrackGatePartModelCount = 0
+  private expectedSourceTrackPadModelCount = 0
+  private expectedSourceTrackStartLineModelCount = 0
+  private expectedSourceTrackSlabModelCount = 0
+  private expectedSourceTrackRailModelCount = 0
+  private expectedSourceTrackSkylineTowerModelCount = 0
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -157,6 +217,7 @@ export class NeonRenderer {
     grid.material.opacity = 0.16
     grid.material.transparent = true
     this.scene.add(grid)
+    preloadSourceModels()
   }
 
   dispose(): void {
@@ -205,6 +266,14 @@ export class NeonRenderer {
       gatePortalCount: 0,
       padMarkerCount: 0,
       trackEnvironmentInstances: 0,
+      sourceTrackGateModelCount: 0,
+      sourceTrackGatePartModelCount: 0,
+      sourceTrackPadModelCount: 0,
+      sourceTrackStartLineModelCount: 0,
+      sourceTrackSlabModelCount: 0,
+      sourceTrackRailModelCount: 0,
+      sourceTrackSkylineTowerModelCount: 0,
+      sourceTrackKitLoaded: false,
     }
     stats.calls = this.renderer.info.render.calls
     stats.triangles = this.renderer.info.render.triangles
@@ -213,6 +282,21 @@ export class NeonRenderer {
     stats.gatePortalCount = this.gatePortals.size
     stats.padMarkerCount = this.padMarkerCount
     stats.trackEnvironmentInstances = this.trackEnvironmentInstances
+    stats.sourceTrackGateModelCount = this.sourceTrackGateModelCount
+    stats.sourceTrackGatePartModelCount = this.sourceTrackGatePartModelCount
+    stats.sourceTrackPadModelCount = this.sourceTrackPadModelCount
+    stats.sourceTrackStartLineModelCount = this.sourceTrackStartLineModelCount
+    stats.sourceTrackSlabModelCount = this.sourceTrackSlabModelCount
+    stats.sourceTrackRailModelCount = this.sourceTrackRailModelCount
+    stats.sourceTrackSkylineTowerModelCount = this.sourceTrackSkylineTowerModelCount
+    stats.sourceTrackKitLoaded =
+      this.sourceTrackSlabModelCount >= this.expectedSourceTrackSlabModelCount &&
+      this.sourceTrackRailModelCount >= this.expectedSourceTrackRailModelCount &&
+      this.sourceTrackSkylineTowerModelCount >= this.expectedSourceTrackSkylineTowerModelCount &&
+      this.sourceTrackGateModelCount >= this.expectedSourceTrackGateModelCount &&
+      this.sourceTrackGatePartModelCount >= this.expectedSourceTrackGatePartModelCount &&
+      this.sourceTrackPadModelCount >= this.expectedSourceTrackPadModelCount &&
+      this.sourceTrackStartLineModelCount >= this.expectedSourceTrackStartLineModelCount
     statsWindow.__NEON_RENDER_STATS = stats
   }
 
@@ -226,6 +310,20 @@ export class NeonRenderer {
     this.gatePortals.clear()
     this.padMarkerCount = 0
     this.trackEnvironmentInstances = 0
+    this.sourceTrackGateModelCount = 0
+    this.sourceTrackGatePartModelCount = 0
+    this.sourceTrackPadModelCount = 0
+    this.sourceTrackStartLineModelCount = 0
+    this.sourceTrackSlabModelCount = 0
+    this.sourceTrackRailModelCount = 0
+    this.sourceTrackSkylineTowerModelCount = 0
+    this.expectedSourceTrackSlabModelCount = 0
+    this.expectedSourceTrackRailModelCount = 0
+    this.expectedSourceTrackSkylineTowerModelCount = 0
+    this.expectedSourceTrackGateModelCount = ENABLE_SOURCE_TRACK_KIT_MODELS ? track.gates.length : 0
+    this.expectedSourceTrackGatePartModelCount = ENABLE_SOURCE_TRACK_KIT_MODELS ? track.gates.length * 3 : 0
+    this.expectedSourceTrackPadModelCount = ENABLE_SOURCE_TRACK_KIT_MODELS ? track.pads.length : 0
+    this.expectedSourceTrackStartLineModelCount = ENABLE_SOURCE_TRACK_KIT_MODELS ? 1 : 0
     const root = new THREE.Group()
     root.name = 'track-root'
 
@@ -296,6 +394,18 @@ export class NeonRenderer {
     startMesh.position.copy(toThree(trackToWorld(track, 0, 0, 0.18)))
     this.applyBasis(startMesh, startProfile.tangent, startProfile.up, startProfile.right)
     root.add(startMesh)
+    this.addSourceTrackKitModel(
+      root,
+      'startLine',
+      'source-track-start-line-model',
+      trackToWorld(track, 0, 0, 0.18),
+      startProfile,
+      new THREE.Vector3(0.72, 0.36, 2 * (startProfile.width + 1.6)),
+      startMesh,
+      () => {
+        this.sourceTrackStartLineModelCount += 1
+      },
+    )
 
     this.scene.add(root)
   }
@@ -328,9 +438,11 @@ export class NeonRenderer {
   }
 
   private addTrackEnvironment(root: THREE.Group, track: RaceTrack): void {
-    const towerCount = Math.round(clamp(track.totalLength / 14, 36, 88))
+    const sourceTowers = track.skylineTowers
+    const towerCount = sourceTowers.length > 0 ? sourceTowers.length : Math.round(clamp(track.totalLength / 14, 36, 88))
     const beaconCount = Math.round(clamp(track.totalLength / 8, 52, 150))
     const dummy = new THREE.Object3D()
+    const sourceTowerInstances: TrackKitInstance[] = []
     const towerMesh = new THREE.InstancedMesh(
       new THREE.BoxGeometry(1, 1, 1),
       new THREE.MeshStandardMaterial({
@@ -354,19 +466,31 @@ export class NeonRenderer {
       beaconCount,
     )
 
-    for (let i = 0; i < towerCount; i += 1) {
-      const distance = (track.totalLength * (i + 0.5)) / towerCount
-      const profile = track.sample(distance)
-      const side = i % 2 === 0 ? 1 : -1
-      const rhythm = ((i * 37) % 17) / 17
-      const height = 9 + rhythm * 24
-      const offset = profile.width * 0.5 + 24 + rhythm * 26
-      const position = add3(profile.center, scale3(profile.right, offset * side))
-      dummy.position.set(position.x, Math.max(-8, profile.center.y - 5) + height * 0.5, position.z)
-      dummy.rotation.set(0, Math.atan2(profile.tangent.x, profile.tangent.z) + rhythm * 0.38, 0)
-      dummy.scale.set(1.5 + rhythm * 2.8, height, 2.2 + (1 - rhythm) * 3.1)
-      dummy.updateMatrix()
-      towerMesh.setMatrixAt(i, dummy.matrix)
+    if (sourceTowers.length > 0) {
+      for (let i = 0; i < sourceTowers.length; i += 1) {
+        const tower = sourceTowers[i]
+        dummy.position.copy(toThree(tower.position))
+        dummy.rotation.set(0, 0, 0)
+        dummy.scale.copy(toThree(tower.scale))
+        dummy.updateMatrix()
+        towerMesh.setMatrixAt(i, dummy.matrix)
+        sourceTowerInstances.push({ matrix: dummy.matrix.clone(), color: tower.color })
+      }
+    } else {
+      for (let i = 0; i < towerCount; i += 1) {
+        const distance = (track.totalLength * (i + 0.5)) / towerCount
+        const profile = track.sample(distance)
+        const side = i % 2 === 0 ? 1 : -1
+        const rhythm = ((i * 37) % 17) / 17
+        const height = 9 + rhythm * 24
+        const offset = profile.width * 0.5 + 24 + rhythm * 26
+        const position = add3(profile.center, scale3(profile.right, offset * side))
+        dummy.position.set(position.x, Math.max(-8, profile.center.y - 5) + height * 0.5, position.z)
+        dummy.rotation.set(0, Math.atan2(profile.tangent.x, profile.tangent.z) + rhythm * 0.38, 0)
+        dummy.scale.set(1.5 + rhythm * 2.8, height, 2.2 + (1 - rhythm) * 3.1)
+        dummy.updateMatrix()
+        towerMesh.setMatrixAt(i, dummy.matrix)
+      }
     }
 
     for (let i = 0; i < beaconCount; i += 1) {
@@ -388,6 +512,17 @@ export class NeonRenderer {
     beaconMesh.instanceMatrix.needsUpdate = true
     root.add(towerMesh, beaconMesh)
     this.trackEnvironmentInstances = towerCount + beaconCount
+    this.expectedSourceTrackSkylineTowerModelCount = ENABLE_SOURCE_TRACK_KIT_MODELS ? sourceTowerInstances.length : 0
+    this.addSourceTrackKitInstances(
+      root,
+      'skylineTower',
+      'source-track-skyline-tower-models',
+      sourceTowerInstances,
+      towerMesh,
+      () => {
+        this.sourceTrackSkylineTowerModelCount += sourceTowerInstances.length
+      },
+    )
   }
 
   private addGatePortal(root: THREE.Group, track: RaceTrack, gate: RaceTrack['gates'][number]): void {
@@ -407,17 +542,42 @@ export class NeonRenderer {
       emissiveIntensity: 0.88,
     })
     const postGeometry = new THREE.BoxGeometry(0.62, 5.8, 0.62)
-    for (const lane of [-gate.halfWidth - 0.34, gate.halfWidth + 0.34]) {
+    for (const lane of [profile.width * 0.5 + 0.84, -profile.width * 0.5 - 0.84]) {
       const post = new THREE.Mesh(postGeometry, postMaterial)
       post.position.copy(toThree(trackToWorld(track, gate.distance, lane, 3.1)))
       this.applyBasis(post, profile.tangent, profile.up, profile.right)
       root.add(post)
+      this.addSourceTrackKitModel(
+        root,
+        'gatePost',
+        'source-track-gate-post-model',
+        trackToWorld(track, gate.distance, lane, 1.2),
+        profile,
+        new THREE.Vector3(0.56, 5.8, 0.56),
+        post,
+        () => {
+          this.sourceTrackGatePartModelCount += 1
+        },
+      )
     }
 
     const beam = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.4, gate.halfWidth * 2 + 1.2), beamMaterial)
     beam.position.copy(toThree(trackToWorld(track, gate.distance, 0, 6.15)))
     this.applyBasis(beam, profile.tangent, profile.up, profile.right)
     root.add(beam)
+    this.addSourceTrackKitModel(
+      root,
+      'gateBeam',
+      'source-track-gate-beam-model',
+      trackToWorld(track, gate.distance, 0, 3.65),
+      profile,
+      new THREE.Vector3(0.52, 0.48, 2 * (profile.width + 1.9)),
+      beam,
+      () => {
+        this.sourceTrackGateModelCount += 1
+        this.sourceTrackGatePartModelCount += 1
+      },
+    )
 
     const left = trackToWorld(track, gate.distance, -gate.halfWidth, 0.42)
     const right = trackToWorld(track, gate.distance, gate.halfWidth, 0.42)
@@ -486,11 +646,162 @@ export class NeonRenderer {
 
     root.add(group)
     this.padMarkerCount += 1
+    this.addSourceTrackKitModel(
+      root,
+      isBoost ? 'speedPad' : 'rechargePad',
+      isBoost ? 'source-track-speed-pad-model' : 'source-track-recharge-pad-model',
+      trackToWorld(track, pad.distance, pad.lane, isBoost ? 0.24 : 0.25),
+      profile,
+      new THREE.Vector3(6.2, 0.16, 4 * pad.halfWidth),
+      group,
+      () => {
+        this.sourceTrackPadModelCount += 1
+      },
+    )
+  }
+
+  private addSourceTrackKitModel(
+    root: THREE.Group,
+    modelId: TrackKitModelId,
+    name: string,
+    position: Vec3,
+    profile: { tangent: Vec3; up: Vec3; right: Vec3 },
+    scale: THREE.Vector3,
+    fallback?: THREE.Object3D | THREE.Object3D[],
+    onLoaded?: () => void,
+  ): void {
+    if (!ENABLE_SOURCE_TRACK_KIT_MODELS) return
+    void loadModel(trackKitModels[modelId]).then((template) => {
+      if (!root.parent || this.scene.getObjectByName('track-root') !== root) return
+      const model = cloneModel(template)
+      model.name = name
+      model.position.copy(toThree(position))
+      this.applyBasis(model, profile.tangent, profile.up, profile.right)
+      model.scale.copy(scale)
+      this.tintTrackKitModel(model, modelId)
+      const fallbacks = Array.isArray(fallback) ? fallback : fallback ? [fallback] : []
+      for (const object of fallbacks) object.visible = false
+      root.add(model)
+      onLoaded?.()
+    }).catch(() => undefined)
+  }
+
+  private addSourceTrackKitInstances(
+    root: THREE.Group,
+    modelId: TrackKitModelId,
+    name: string,
+    instances: TrackKitInstance[],
+    fallback: THREE.Object3D | THREE.Object3D[],
+    onLoaded: () => void,
+  ): void {
+    if (!ENABLE_SOURCE_TRACK_KIT_MODELS || instances.length === 0) return
+    void loadModel(trackKitModels[modelId]).then((template) => {
+      if (!root.parent || this.scene.getObjectByName('track-root') !== root) return
+      template.updateMatrixWorld(true)
+      const group = new THREE.Group()
+      group.name = name
+      const dummy = new THREE.Object3D()
+      const instanceMatrix = new THREE.Matrix4()
+      const instanceColor = new THREE.Color()
+      const usesInstanceColor = instances.some((instance) => instance.color)
+      let batchCount = 0
+      template.traverse((object) => {
+        const mesh = object as THREE.Mesh
+        if (!mesh.isMesh || !mesh.geometry) return
+        const meshMatrix = mesh.matrixWorld.clone()
+        const instanced = new THREE.InstancedMesh(
+          mesh.geometry.clone(),
+          this.cloneTrackKitMaterial(mesh.material, modelId, usesInstanceColor),
+          instances.length,
+        )
+        instanced.name = `${name}-${mesh.name || 'mesh'}`
+        instanced.frustumCulled = false
+        for (let index = 0; index < instances.length; index += 1) {
+          const instance = instances[index]
+          if ('matrix' in instance) {
+            instanceMatrix.copy(instance.matrix).multiply(meshMatrix)
+          } else {
+            dummy.position.copy(toThree(instance.position))
+            this.applyBasis(dummy, instance.profile.tangent, instance.profile.up, instance.profile.right)
+            dummy.scale.copy(instance.scale)
+            dummy.updateMatrix()
+            instanceMatrix.copy(dummy.matrix).multiply(meshMatrix)
+          }
+          instanced.setMatrixAt(index, instanceMatrix)
+          if (instance.color) {
+            instanced.setColorAt(index, instanceColor.set(instance.color))
+          }
+        }
+        instanced.instanceMatrix.needsUpdate = true
+        if (instanced.instanceColor) instanced.instanceColor.needsUpdate = true
+        group.add(instanced)
+        batchCount += 1
+      })
+      if (batchCount === 0) return
+      const fallbacks = Array.isArray(fallback) ? fallback : [fallback]
+      for (const object of fallbacks) object.visible = false
+      root.add(group)
+      onLoaded()
+    }).catch(() => undefined)
+  }
+
+  private cloneTrackKitMaterial(
+    material: THREE.Material | THREE.Material[],
+    modelId: TrackKitModelId,
+    usesInstanceColor = false,
+  ): THREE.Material | THREE.Material[] {
+    if (Array.isArray(material)) {
+      return material.map((entry) => this.cloneTrackKitMaterial(entry, modelId, usesInstanceColor) as THREE.Material)
+    }
+    const clone = material.clone()
+    this.tintTrackKitMaterialInstance(clone, modelId, usesInstanceColor)
+    return clone
+  }
+
+  private tintTrackKitModel(model: THREE.Group, modelId: TrackKitModelId): void {
+    model.traverse((object) => {
+      const mesh = object as THREE.Mesh
+      if (!mesh.isMesh) return
+      const meshMaterial = mesh.material as THREE.MeshStandardMaterial | THREE.MeshStandardMaterial[]
+      const materials = Array.isArray(meshMaterial) ? meshMaterial : [meshMaterial]
+      for (const material of materials) {
+        this.tintTrackKitMaterialInstance(material, modelId)
+      }
+    })
+  }
+
+  private tintTrackKitMaterialInstance(
+    material: THREE.Material,
+    modelId: TrackKitModelId,
+    usesInstanceColor = false,
+  ): void {
+    const color =
+      modelId === 'rechargePad'
+        ? '#5dfd7a'
+        : modelId === 'speedPad' || modelId === 'trackRail'
+          ? '#6ce8ff'
+          : modelId === 'trackSlab'
+            ? '#274f66'
+            : modelId === 'skylineTower'
+              ? '#09172c'
+              : '#ff3df2'
+    const emissiveMaterial = material as THREE.MeshStandardMaterial
+    if (!emissiveMaterial || !('emissive' in emissiveMaterial)) return
+    if (usesInstanceColor) {
+      material.vertexColors = true
+      if ('color' in emissiveMaterial) emissiveMaterial.color = new THREE.Color('#ffffff')
+    }
+    emissiveMaterial.emissive = new THREE.Color(color)
+    emissiveMaterial.emissiveIntensity =
+      modelId === 'skylineTower' ? 0.18 : modelId === 'gatePost' || modelId === 'trackSlab' ? 0.32 : 0.56
+    emissiveMaterial.toneMapped = false
   }
 
   private addTrackKitSegments(root: THREE.Group, track: RaceTrack): void {
-    const segmentCount = Math.round(clamp(track.totalLength / 6.8, 48, 120))
-    const segmentLength = track.totalLength / segmentCount
+    const segments = track.visualSegments
+    const segmentCount = segments.length
+    this.expectedSourceTrackSlabModelCount = ENABLE_SOURCE_TRACK_KIT_MODELS ? segmentCount : 0
+    this.expectedSourceTrackRailModelCount = ENABLE_SOURCE_TRACK_KIT_MODELS ? segmentCount * 2 : 0
     const slabMesh = new THREE.InstancedMesh(
       new THREE.BoxGeometry(1, 1, 1),
       new THREE.MeshStandardMaterial({
@@ -514,28 +825,39 @@ export class NeonRenderer {
       segmentCount * 2,
     )
     const dummy = new THREE.Object3D()
+    const slabInstances: TrackKitInstance[] = []
+    const railInstances: TrackKitInstance[] = []
     let railIndex = 0
-    for (let i = 0; i < segmentCount; i += 1) {
-      const distance = (track.totalLength * (i + 0.5)) / segmentCount
-      const profile = track.sample(distance)
+    for (let i = 0; i < segments.length; i += 1) {
+      const profile = segments[i]
+      slabInstances.push({
+        position: profile.center,
+        profile,
+        scale: new THREE.Vector3((profile.length + 0.96) * 2, 0.48, profile.width * 2),
+      })
       this.setInstance(
         slabMesh,
         i,
         dummy,
         add3(profile.center, scale3(profile.up, -0.08)),
         profile,
-        new THREE.Vector3(segmentLength + 0.96, 0.14, profile.width),
+        new THREE.Vector3(profile.length + 0.96, 0.14, profile.width),
       )
 
       const railOffset = profile.width * 0.5 + 0.34
       for (const side of [-1, 1]) {
+        railInstances.push({
+          position: add3(add3(profile.center, scale3(profile.right, railOffset * side)), scale3(profile.up, 0.42)),
+          profile,
+          scale: new THREE.Vector3((profile.length + 0.96) * 2, 1.64, 0.44),
+        })
         this.setInstance(
           railMesh,
           railIndex,
           dummy,
           add3(add3(profile.center, scale3(profile.right, railOffset * side)), scale3(profile.up, 0.42)),
           profile,
-          new THREE.Vector3(segmentLength + 0.96, 0.82, 0.22),
+          new THREE.Vector3(profile.length + 0.96, 0.82, 0.22),
         )
         railIndex += 1
       }
@@ -543,6 +865,12 @@ export class NeonRenderer {
     slabMesh.instanceMatrix.needsUpdate = true
     railMesh.instanceMatrix.needsUpdate = true
     root.add(slabMesh, railMesh)
+    this.addSourceTrackKitInstances(root, 'trackSlab', 'source-track-slab-models', slabInstances, slabMesh, () => {
+      this.sourceTrackSlabModelCount += slabInstances.length
+    })
+    this.addSourceTrackKitInstances(root, 'trackRail', 'source-track-rail-models', railInstances, railMesh, () => {
+      this.sourceTrackRailModelCount += railInstances.length
+    })
   }
 
   private setInstance(
@@ -792,7 +1120,8 @@ export class NeonRenderer {
         player.speedPadPulse * 0.34 +
         player.airbrakeExitPulse * 0.3 +
         player.slipstreamPulse * 0.18 +
-        player.rivalPassPulse * 0.2,
+        player.rivalPassPulse * 0.2 +
+        player.knockoutRewardPulse * 0.26,
       0,
       1,
     )
@@ -852,6 +1181,7 @@ export class NeonRenderer {
       player.airbrakeExitPulse * 2.25 +
       player.slipstreamPulse * 0.78 +
       player.rivalPassPulse * 1.44 +
+      player.knockoutRewardPulse * 1.64 +
       player.crashOutLaunchRemaining * 0.72
     const behind = scale3(cameraForward, -(6.8 + speedRatio * 2.4 + player.boostIntensity * 1.1 + eventPush * 0.42))
     const side = scale3(cameraRight, clamp(-sideSlip * 1.1 - player.telemetry.railPressure * Math.sign(player.lane) * 0.68, -1.8, 1.8))
@@ -887,6 +1217,7 @@ export class NeonRenderer {
         player.slipstreamPulse * 4.8 +
         player.airbrakeExitPulse * 8 +
         player.rivalPassPulse * 5.6 +
+        player.knockoutRewardPulse * 6.2 +
         player.packBumpPulse * 4.6,
       86,
       118,

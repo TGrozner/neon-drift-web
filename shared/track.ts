@@ -15,6 +15,7 @@ import {
 } from './math'
 
 export type TrackId =
+  | 'tutorial-circuit'
   | 'neon-oval'
   | 'friend-circuit'
   | 'skyline-sprint'
@@ -33,6 +34,16 @@ export type TrackProfile = {
   width: number
   distance: number
   bankDegrees: number
+}
+
+export type TrackVisualSegment = TrackProfile & {
+  length: number
+}
+
+export type SkylineTowerVisual = {
+  position: Vec3
+  scale: Vec3
+  color: string
 }
 
 export type TrackGate = {
@@ -69,6 +80,8 @@ export type RaceTrack = {
   gates: TrackGate[]
   pads: TrackPad[]
   startGrid: StartGridSlot[]
+  visualSegments: TrackVisualSegment[]
+  skylineTowers: SkylineTowerVisual[]
   sample: (distance: number) => TrackProfile
 }
 
@@ -193,6 +206,117 @@ const bakeTrackSamples = (spec: SourceTrackSpec): { samples: TrackSample[]; tota
   return { samples, totalLength }
 }
 
+const makeVisualSegments = (samples: TrackSample[], totalLength: number, allowInvertedFrame: boolean): TrackVisualSegment[] =>
+  samples.map((a, index) => {
+    const b = samples[(index + 1) % samples.length]
+    const length = index === samples.length - 1
+      ? Math.max(0.0001, totalLength - a.distance)
+      : Math.max(0.0001, b.distance - a.distance)
+    const tangent = normalize3(sub3(b.center, a.center), normalize3(a.tangent, { x: 1, y: 0, z: 0 }))
+    const averagedRight = add3(a.right, b.right)
+    const projectedRight = sub3(averagedRight, scale3(tangent, dot3(averagedRight, tangent)))
+    let right = normalize3(projectedRight, normalize3(a.right, { x: 0, y: 0, z: -1 }))
+    const averageUp = normalize3(add3(a.up, b.up), normalize3(a.up, up))
+    let segmentUp = normalize3(cross3(tangent, right), averageUp)
+
+    if (!allowInvertedFrame && segmentUp.y < 0) {
+      segmentUp = scale3(segmentUp, -1)
+      right = scale3(right, -1)
+    }
+
+    right = normalize3(cross3(segmentUp, tangent), right)
+    segmentUp = normalize3(cross3(tangent, right), segmentUp)
+
+    return {
+      center: lerp3(a.center, b.center, 0.5),
+      tangent,
+      right,
+      up: segmentUp,
+      width: (a.width + b.width) * 0.5,
+      distance: wrapDistance(a.distance + length * 0.5, totalLength),
+      bankDegrees: (a.bankDegrees + b.bankDegrees) * 0.5,
+      length,
+    }
+  })
+
+const skylineTowerColors = {
+  city: '#05070b',
+  cityDim: '#040509',
+  cityCyan: '#04425c',
+  cityMagenta: '#570f52',
+} as const
+
+const skylineTowerPlacements = [
+  ['minX', -2100, 'minZ', -2250, 520, 520, 1420, skylineTowerColors.cityDim],
+  ['centerX', -2600, 'minZ', -2450, 380, 420, 960, skylineTowerColors.city],
+  ['centerX', 2300, 'minZ', -2360, 440, 390, 1180, skylineTowerColors.cityDim],
+  ['maxX', 2100, 'minZ', -1840, 500, 540, 1520, skylineTowerColors.city],
+  ['maxX', 2380, 'centerZ', -960, 360, 360, 920, skylineTowerColors.cityCyan],
+  ['maxX', 2220, 'centerZ', 1320, 560, 470, 1640, skylineTowerColors.cityDim],
+  ['centerX', 1740, 'maxZ', 2180, 460, 430, 1220, skylineTowerColors.city],
+  ['centerX', -1360, 'maxZ', 2400, 380, 380, 980, skylineTowerColors.cityDim],
+  ['minX', -2020, 'maxZ', 1900, 520, 460, 1480, skylineTowerColors.city],
+  ['minX', -2460, 'centerZ', 760, 360, 420, 900, skylineTowerColors.cityCyan],
+  ['minX', -3100, 'centerZ', -1220, 340, 360, 1180, skylineTowerColors.cityDim],
+  ['minX', -3320, 'centerZ', 1640, 300, 330, 1040, skylineTowerColors.cityCyan],
+  ['centerX', -420, 'minZ', -3060, 420, 360, 1360, skylineTowerColors.city],
+  ['centerX', 820, 'minZ', -3260, 300, 300, 880, skylineTowerColors.cityDim],
+  ['maxX', 3100, 'centerZ', -1540, 380, 360, 1180, skylineTowerColors.cityCyan],
+  ['maxX', 3300, 'centerZ', 540, 420, 400, 1360, skylineTowerColors.cityDim],
+  ['centerX', 720, 'maxZ', 3120, 360, 340, 1280, skylineTowerColors.cityCyan],
+  ['centerX', -720, 'maxZ', 3260, 330, 330, 1080, skylineTowerColors.cityDim],
+  ['minX', -2920, 'minZ', -520, 260, 300, 820, skylineTowerColors.city],
+  ['maxX', 2860, 'maxZ', -420, 280, 320, 960, skylineTowerColors.city],
+  ['centerX', -1960, 'minZ', -3450, 300, 320, 1120, skylineTowerColors.cityMagenta],
+  ['centerX', 1960, 'maxZ', 3520, 320, 340, 1320, skylineTowerColors.cityMagenta],
+  ['minX', -3650, 'minZ', 360, 240, 300, 860, skylineTowerColors.cityCyan],
+  ['maxX', 3680, 'maxZ', -680, 260, 300, 940, skylineTowerColors.cityCyan],
+  ['centerX', 3160, 'minZ', -3060, 280, 320, 1040, skylineTowerColors.cityDim],
+  ['centerX', -3040, 'maxZ', 3040, 280, 320, 1040, skylineTowerColors.cityDim],
+  ['minX', -4300, 'minZ', -1620, 260, 280, 1160, skylineTowerColors.city],
+  ['minX', -4380, 'maxZ', 920, 220, 260, 980, skylineTowerColors.cityMagenta],
+  ['maxX', 4320, 'minZ', 1260, 260, 280, 1220, skylineTowerColors.city],
+  ['maxX', 4460, 'maxZ', 1540, 240, 260, 1080, skylineTowerColors.cityCyan],
+  ['centerX', -760, 'minZ', -4120, 260, 280, 1040, skylineTowerColors.cityCyan],
+  ['centerX', 1460, 'minZ', -3980, 220, 260, 940, skylineTowerColors.cityDim],
+  ['centerX', -1540, 'maxZ', 4080, 240, 280, 1080, skylineTowerColors.city],
+  ['centerX', 460, 'maxZ', 4280, 260, 300, 1180, skylineTowerColors.cityMagenta],
+] as const
+
+const makeSkylineTowers = (trackId: TrackId, samples: TrackSample[]): SkylineTowerVisual[] => {
+  if (trackId === 'tutorial-circuit' || trackId === 'neon-oval') return []
+  const xs = samples.map((sample) => sample.center.x)
+  const zs = samples.map((sample) => sample.center.z)
+  const minX = Math.min(...xs)
+  const maxX = Math.max(...xs)
+  const minZ = Math.min(...zs)
+  const maxZ = Math.max(...zs)
+  const anchors = {
+    minX,
+    maxX,
+    centerX: (minX + maxX) * 0.5,
+    minZ,
+    maxZ,
+    centerZ: (minZ + maxZ) * 0.5,
+  }
+  const world = (sourceUnits: number): number => sourceUnits * WORLD_SCALE
+  const modelScale = (sourceUnits: number): number => sourceUnits * WORLD_SCALE * 2
+
+  return skylineTowerPlacements.map(([xAnchor, xOffset, zAnchor, zOffset, width, depth, height, color]) => ({
+    position: {
+      x: anchors[xAnchor] + world(xOffset),
+      y: world(height * 0.42),
+      z: anchors[zAnchor] + world(zOffset),
+    },
+    scale: {
+      x: modelScale(width),
+      y: modelScale(height),
+      z: modelScale(depth),
+    },
+    color,
+  }))
+}
+
 const interpolateSample = (
   samples: TrackSample[],
   totalLength: number,
@@ -240,7 +364,19 @@ const makeGates = (track: Pick<RaceTrack, 'totalLength' | 'sample'>): TrackGate[
     }
   })
 
-const makeStartGrid = (): StartGridSlot[] => {
+const makeStartGrid = (trackId: TrackId): StartGridSlot[] => {
+  if (trackId === 'tutorial-circuit') {
+    return [
+      { index: 0, distance: 0, lane: 0, back: 12 },
+      { index: 1, distance: 0, lane: -10, back: 24 },
+      { index: 2, distance: 0, lane: 10, back: 24 },
+      { index: 3, distance: 0, lane: -16, back: 36 },
+      { index: 4, distance: 0, lane: 16, back: 36 },
+      { index: 5, distance: 0, lane: -5, back: 48 },
+      { index: 6, distance: 0, lane: 5, back: 48 },
+      { index: 7, distance: 0, lane: 0, back: 60 },
+    ]
+  }
   const slots: StartGridSlot[] = []
   const lateralSpacing = 4.9
   const rowSpacing = 5
@@ -268,12 +404,14 @@ const insideTurnLaneScale = (track: RaceTrack, fraction: number, scale: number):
 }
 
 const speedPadFractionsFor = (id: TrackId): number[] => {
+  if (id === 'tutorial-circuit') return [0.32, 0.48, 0.62, 0.78, 0.9]
   if (STUNT_TRACKS.has(id)) return [0.1, 0.24, 0.4, 0.56, 0.72, 0.88]
   if (id === 'banked-speedway') return [0.11, 0.28, 0.43, 0.57, 0.74, 0.9]
   return [0.1, 0.24, 0.48, 0.62, 0.82, 0.93]
 }
 
 const rechargePadFractionsFor = (id: TrackId): number[] => {
+  if (id === 'tutorial-circuit') return [0.18, 0.36, 0.68]
   if (STUNT_TRACKS.has(id)) return [0.33, 0.67]
   if (id === 'banked-speedway') return [0.36, 0.69]
   return [0.34, 0.74]
@@ -342,7 +480,9 @@ const makeSourceTrack = (spec: SourceTrackSpec): RaceTrack => {
     width: averageWidth,
     gates: [],
     pads: [],
-    startGrid: makeStartGrid(),
+    startGrid: makeStartGrid(spec.id),
+    visualSegments: makeVisualSegments(samples, totalLength, spec.allowInvertedFrame),
+    skylineTowers: makeSkylineTowers(spec.id, samples),
     sample: (distance: number) => interpolateSample(samples, totalLength, distance, spec.allowInvertedFrame),
   }
   track.gates = makeGates(track)

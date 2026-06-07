@@ -14,14 +14,15 @@ import './App.css'
 function App() {
   const { race, raceRef, start, menu, setTouch, reset, version } = useNeonGame()
   const [selectedProfile, setSelectedProfile] = useState<ShipProfileId>('balanced')
-  const [selectedTrack, setSelectedTrack] = useState<TrackId>('neon-oval')
-  useNeonAudio(race)
+  const [selectedTrack, setSelectedTrack] = useState<TrackId>('tutorial-circuit')
+  const audio = useNeonAudio(race)
+  const tutorialTrackId = race.phase === 'menu' ? selectedTrack : race.track.id
 
   return (
     <main className="app-shell">
       <GameCanvas raceRef={raceRef} />
       <Hud race={race} />
-      <Tutorial race={race} raceVersion={version} />
+      <Tutorial activeTrackId={tutorialTrackId} race={race} raceVersion={version} />
       <RaceOverlay
         race={race}
         onRestart={() => start(selectedProfile, selectedTrack)}
@@ -33,6 +34,7 @@ function App() {
         selectedTrack={selectedTrack}
         onSelectProfile={setSelectedProfile}
         onSelectTrack={setSelectedTrack}
+        onMenuCue={audio.playMenuCue}
         onStart={() => start(selectedProfile, selectedTrack)}
       />
       <TouchControls onTouch={setTouch} onReset={reset} />
