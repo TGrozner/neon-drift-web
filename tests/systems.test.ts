@@ -19,6 +19,12 @@ import { NeonAudioEngine } from '../src/audio/neonAudio'
 import { Tutorial } from '../src/components/Tutorial'
 import { draftMeterRatio } from '../src/components/draftSignals'
 import { standingsForHud } from '../src/components/hudRows'
+import {
+  TOUCH_STEER_MAX,
+  TOUCH_THUMB_TRAVEL,
+  touchSteerFromCenteredRatio,
+  touchThumbOffset,
+} from '../src/components/touchControlMath'
 import { shouldAdvanceTutorial } from '../src/components/tutorialProgress'
 import { applyTouchCommand, applyTouchSteer, createTouchState } from '../src/hooks/useNeonGame'
 import { createRenderBasis } from '../src/render/renderer'
@@ -682,6 +688,16 @@ describe('browser integration helpers', () => {
     expect(touch.steer).toBe(0)
     expect(touch.left).toBe(false)
     expect(touch.right).toBe(false)
+  })
+
+  it('maps mobile steer gestures through a forgiving bounded curve', () => {
+    expect(touchSteerFromCenteredRatio(0)).toBe(0)
+    expect(touchSteerFromCenteredRatio(0.05)).toBe(0)
+    expect(touchSteerFromCenteredRatio(Number.NaN)).toBe(0)
+    expect(touchSteerFromCenteredRatio(1)).toBeCloseTo(-TOUCH_STEER_MAX)
+    expect(touchSteerFromCenteredRatio(-1)).toBeCloseTo(TOUCH_STEER_MAX)
+    expect(Math.abs(touchSteerFromCenteredRatio(0.45))).toBeLessThan(0.35)
+    expect(touchThumbOffset(TOUCH_STEER_MAX)).toBeCloseTo(-TOUCH_STEER_MAX * TOUCH_THUMB_TRAVEL)
   })
 
   it('renders tutorial UI when tutorial storage is unavailable', () => {

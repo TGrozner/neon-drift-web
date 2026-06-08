@@ -17,6 +17,7 @@ function App() {
   const [selectedTrack, setSelectedTrack] = useState<TrackId>('tutorial-circuit')
   const audio = useNeonAudio(race)
   const tutorialTrackId = race.phase === 'menu' ? selectedTrack : race.track.id
+  const touchControlsActive = race.phase === 'warmup' || race.phase === 'countdown' || race.phase === 'racing'
 
   return (
     <main className="app-shell">
@@ -38,7 +39,8 @@ function App() {
         onStart={() => start(selectedProfile, selectedTrack)}
       />
       <TouchControls
-        autoThrottle={race.phase !== 'menu' && race.phase !== 'results'}
+        key={touchControlsActive ? 'drive' : 'idle'}
+        autoThrottle={touchControlsActive}
         onSteer={setTouchSteer}
         onTouch={setTouch}
         onReset={reset}

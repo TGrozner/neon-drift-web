@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import type { TouchCommand } from '../hooks/useNeonGame'
+import { touchSteerFromCenteredRatio, touchThumbOffset } from './touchControlMath'
 
 type ActionCommand = Extract<TouchCommand, 'boost' | 'airbrake'>
 
@@ -11,9 +12,6 @@ type Props = {
 }
 
 const MOBILE_CONTROLS_QUERY = '(max-width: 820px)'
-
-const clamp = (value: number): number =>
-  Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0
 
 const bindAction = (
   command: ActionCommand,
@@ -70,6 +68,14 @@ export function TouchControls({ autoThrottle, onSteer, onTouch, onReset }: Props
     }
   }, [autoThrottle, onTouch])
 
+  useEffect(() => {
+    if (autoThrottle) return
+    steeringActiveRef.current = false
+    onSteer(0)
+    onTouch('boost', false)
+    onTouch('airbrake', false)
+  }, [autoThrottle, onSteer, onTouch])
+
   const setPressed = (command: ActionCommand, active: boolean) => {
     setPressedState((current) => ({ ...current, [command]: active }))
   }
@@ -78,7 +84,7 @@ export function TouchControls({ autoThrottle, onSteer, onTouch, onReset }: Props
     const rect = event.currentTarget.getBoundingClientRect()
     const clientX = Number.isFinite(event.clientX) ? event.clientX : rect.left + rect.width * 0.5
     const centered = (clientX - rect.left - rect.width * 0.5) / Math.max(1, rect.width * 0.5)
-    const nextSteer = Math.abs(centered) < 0.08 ? 0 : clamp(-centered)
+    const nextSteer = touchSteerFromCenteredRatio(centered)
     setSteer(nextSteer)
     onSteer(nextSteer)
   }
@@ -125,13 +131,13 @@ export function TouchControls({ autoThrottle, onSteer, onTouch, onReset }: Props
       >
         <span className="steer-zone left">←</span>
         <span className="steer-zone right">→</span>
-        <span className="steer-thumb" style={{ transform: `translateX(${-steer * 56}px)` }} />
+        <span className="steer-thumb" style={{ transform: `translateX(${touchThumbOffset(steer)}px)` }} />
       </div>
 
       <div className="touch-actions">
         <button type="button" {...actionProps('boost')} aria-label="Boost">BOOST</button>
         <button type="button" {...actionProps('airbrake')} aria-label="Drift airbrake">DRIFT</button>
-        <button type="button" className="touch-reset-button" onClick={onReset} aria-label="Reset to checkpoint">R</button>
+        <button type="button" className="touch-reset-button" onClick={onReset} aria-label="Reset to checkpoint">RESET</button>
       </div>
     </div>
   )

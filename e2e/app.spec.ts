@@ -314,6 +314,7 @@ test('keeps the mobile event strip clear of the airbrake charge meter', async ({
   ).includes('BOOST'), { timeout: 15_000 }).toBe(true)
   await expect(page.getByTestId('mobile-race-strip')).toBeVisible()
   await expect.poll(() => elementsHaveNoVisibleOverlap(page, '.event-strip', '.airbrake-charge')).toBe(true)
+  await expect.poll(() => elementsHaveNoVisibleOverlap(page, '.event-strip, .airbrake-charge', '.touch-controls')).toBe(true)
   await expect.poll(() => elementsHaveNoVisibleOverlap(page, '[data-testid="mobile-race-strip"]', '.hud-race, .touch-controls, .tutorial')).toBe(true)
   await page.keyboard.up('Shift')
   await releaseThrottle(page)

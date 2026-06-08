@@ -605,8 +605,8 @@
 
 .steer-pad {
   position: relative;
-  width: min(58vw, 236px);
-  height: 112px;
+  width: min(64vw, 276px);
+  height: 124px;
   overflow: hidden;
   border: 1px solid rgba(238, 247, 255, 0.24);
   border-radius: 8px;
@@ -630,7 +630,7 @@
   width: 50%;
   place-items: center;
   color: rgba(238, 247, 255, 0.76);
-  font-size: 42px;
+  font-size: 46px;
   font-weight: 900;
 }
 
@@ -646,8 +646,8 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 56px;
-  height: 56px;
+  width: 60px;
+  height: 60px;
   border: 1px solid rgba(238, 247, 255, 0.72);
   border-radius: 8px;
   background: rgba(108, 232, 255, 0.2);
@@ -658,12 +658,14 @@
 
 .touch-actions {
   display: grid;
-  grid-template-columns: repeat(2, 58px);
+  grid-template-columns: 74px;
   gap: 8px;
 }
 
 .touch-controls button {
-  height: 56px;
+  box-sizing: border-box;
+  height: 64px;
+  padding: 0 6px;
   border: 1px solid rgba(238, 247, 255, 0.24);
   border-radius: 8px;
   background: rgba(3, 7, 14, 0.74);
@@ -690,8 +692,9 @@
   background: rgba(255, 191, 74, 0.13);
 }
 
-.touch-reset-button {
-  grid-column: 1 / -1;
+.touch-controls .touch-reset-button {
+  height: 42px;
+  font-size: 10px;
 }
 
 @media (max-width: 820px) {
@@ -766,6 +769,7 @@
   .touch-controls {
     display: flex;
     inset: auto 12px calc(16px + env(safe-area-inset-bottom)) 12px;
+    gap: 14px;
   }
 
   .mobile-race-strip {
@@ -810,7 +814,7 @@
 
   .event-strip {
     right: 16px;
-    bottom: 164px;
+    bottom: 224px;
     left: auto;
     flex-direction: column;
     align-items: flex-end;
@@ -818,7 +822,7 @@
   }
 
   .airbrake-charge {
-    bottom: 150px;
+    bottom: 206px;
     left: 16px;
     width: min(224px, calc(100vw - 160px));
     transform: none;
