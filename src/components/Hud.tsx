@@ -1,5 +1,6 @@
 import { CRASH_OUT, RACE, SHIP_PROFILES } from '../../shared/constants'
 import { gapToNext, getPlayer, type RaceState } from '../../shared/race'
+import { draftMeterRatio } from './draftSignals'
 import { standingsForHud } from './hudRows'
 
 type Props = {
@@ -26,7 +27,7 @@ export function Hud({ race }: Props) {
   const nextGateDistance = gapToNext(race, player)
   const nextUrgency = Math.max(0, Math.min(1, 1 - nextGateDistance / 180))
   const lineSafety = Math.max(0, Math.min(1, 1 - Math.max(player.telemetry.offTrack ? 1 : 0, player.telemetry.railPressure)))
-  const draft = Math.max(player.slipstreamPulse, player.rivalPassPulse, player.knockoutRewardPulse)
+  const draft = draftMeterRatio(player)
   const rivals = race.rivals.length > 0
     ? race.rivals
     : race.standings.filter((vehicle) => vehicle.id !== player.id && !vehicle.finished).slice(0, 3)
@@ -64,7 +65,7 @@ export function Hud({ race }: Props) {
           <span style={{ width: `${player.power * 100}%` }} />
         </div>
         <div className="meter draft">
-          <span style={{ width: `${Math.min(1, player.slipstreamPulse) * 100}%` }} />
+          <span style={{ width: `${draft * 100}%` }} />
         </div>
       </div>
 
@@ -83,7 +84,7 @@ export function Hud({ race }: Props) {
         <div className="mini-bars">
           <span style={{ width: `${nextUrgency * 100}%` }} />
           <span style={{ width: `${lineSafety * 100}%` }} />
-          <span style={{ width: `${Math.min(1, draft) * 100}%` }} />
+          <span style={{ width: `${draft * 100}%` }} />
         </div>
       </div>
 
@@ -99,7 +100,7 @@ export function Hud({ race }: Props) {
         </div>
         <div className="readability-row">
           <span>DRAFT</span>
-          <div className="meter draft-strong"><span style={{ width: `${Math.min(1, draft) * 100}%` }} /></div>
+          <div className="meter draft-strong"><span style={{ width: `${draft * 100}%` }} /></div>
         </div>
       </div>
 

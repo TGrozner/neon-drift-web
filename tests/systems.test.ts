@@ -17,7 +17,9 @@ import {
 import { NEON_OVAL, TRACKS, trackToWorld } from '../shared/track'
 import { NeonAudioEngine } from '../src/audio/neonAudio'
 import { Tutorial } from '../src/components/Tutorial'
+import { draftMeterRatio } from '../src/components/draftSignals'
 import { standingsForHud } from '../src/components/hudRows'
+import { shouldAdvanceTutorial } from '../src/components/tutorialProgress'
 import { applyTouchCommand, applyTouchSteer, createTouchState } from '../src/hooks/useNeonGame'
 import { createRenderBasis } from '../src/render/renderer'
 
@@ -279,6 +281,39 @@ describe('slipstream', () => {
 
     expect(getPlayer(withDraft).slipstreamPulse).toBeGreaterThan(0)
     expect(getPlayer(withDraft).forwardSpeed).toBeGreaterThan(getPlayer(withoutDraft).forwardSpeed)
+  })
+})
+
+describe('draft UI alignment', () => {
+  it('keeps DRAFT meters tied to active slipstream instead of reward pulses', () => {
+    const vehicle = createVehicle('player', 'P1', 'balanced', true, 0, 0)
+
+    vehicle.slipstreamPulse = 0
+    vehicle.rivalPassPulse = 1
+    vehicle.knockoutRewardPulse = 1
+    expect(draftMeterRatio(vehicle)).toBe(0)
+
+    vehicle.slipstreamPulse = 0.42
+    expect(draftMeterRatio(vehicle)).toBeCloseTo(0.42)
+
+    vehicle.slipstreamPulse = 2
+    expect(draftMeterRatio(vehicle)).toBe(1)
+
+    vehicle.slipstreamPulse = Number.NaN
+    expect(draftMeterRatio(vehicle)).toBe(0)
+  })
+
+  it('advances the tutorial draft step only from real slipstream', () => {
+    const race = startRace('balanced')
+    race.phase = 'racing'
+    const player = getPlayer(race)
+
+    player.slipstreamPulse = 0
+    player.rivalPassPulse = 1
+    expect(shouldAdvanceTutorial('draft', race)).toBe(false)
+
+    player.slipstreamPulse = 0.06
+    expect(shouldAdvanceTutorial('draft', race)).toBe(true)
   })
 })
 

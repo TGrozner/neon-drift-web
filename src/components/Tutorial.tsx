@@ -1,21 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getPlayer, type RaceState } from '../../shared/race'
+import type { RaceState } from '../../shared/race'
 import type { TrackId } from '../../shared/track'
-
-type StepId =
-  | 'menu'
-  | 'launch'
-  | 'thrust'
-  | 'airbrake'
-  | 'boost'
-  | 'pads'
-  | 'draft'
-  | 'line'
-  | 'checkpoints'
-  | 'complete'
+import { shouldAdvanceTutorial, type TutorialStepId } from './tutorialProgress'
 
 type TutorialStep = {
-  id: StepId
+  id: TutorialStepId
   title: string
   body: string
   goal: string
@@ -102,20 +91,6 @@ const steps: TutorialStep[] = [
   },
 ]
 
-const shouldAdvance = (step: StepId, race: RaceState): boolean => {
-  const player = getPlayer(race)
-  if (step === 'menu') return race.phase !== 'menu'
-  if (step === 'launch') return race.phase === 'racing' && player.forwardSpeed > 3
-  if (step === 'thrust') return player.forwardSpeed > 18 && Math.abs(player.lane) > 0.8
-  if (step === 'airbrake') return player.airbrakeExitPulse > 0.05 || player.telemetry.airbrakeExitCharge > 0.55
-  if (step === 'boost') return player.isBoosting || player.boostStartPulse > 0.05
-  if (step === 'pads') return player.speedPadPulse > 0.05 || player.rechargePadPulse > 0.05
-  if (step === 'draft') return player.slipstreamPulse > 0.05 || player.rivalPassPulse > 0.05
-  if (step === 'line') return player.telemetry.cleanLineQuality > 0.65 || player.powerDamagePulse > 0.05
-  if (step === 'checkpoints') return player.gatePulse > 0.05 || player.lapPulse > 0.05
-  return false
-}
-
 type Props = {
   activeTrackId: TrackId
   race: RaceState
@@ -182,7 +157,7 @@ export function Tutorial({ activeTrackId, race, raceVersion }: Props) {
   useEffect(() => {
     if (!current) return
     if (current.id !== 'menu' && !acknowledged) return
-    if (!shouldAdvance(current.id, race)) return
+    if (!shouldAdvanceTutorial(current.id, race)) return
     const stepId = current.id
     const timeout = window.setTimeout(() => {
       setIndex((value) => {

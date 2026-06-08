@@ -207,7 +207,7 @@ export class NeonRenderer {
       new THREE.MeshBasicMaterial({
         color: '#ffffff',
         transparent: true,
-        opacity: 0.26,
+        opacity: 0.2,
         blending: THREE.AdditiveBlending,
         depthTest: false,
         depthWrite: false,
@@ -224,7 +224,7 @@ export class NeonRenderer {
       new THREE.MeshBasicMaterial({
         color: '#ff2df4',
         transparent: true,
-        opacity: 0.11,
+        opacity: 0.085,
         depthTest: true,
         depthWrite: false,
         side: THREE.DoubleSide,
@@ -1095,7 +1095,7 @@ export class NeonRenderer {
       this.slipstreamDummy.updateMatrix()
       this.slipstreamGroundMesh.setMatrixAt(index, this.slipstreamDummy.matrix)
       const activeStrength = clamp(influence.strength, 0, 1)
-      const groundBrightness = 0.28 + alpha * segment.intensity * 0.26 + activeStrength * 0.24
+      const groundBrightness = 0.2 + alpha * segment.intensity * 0.19 + activeStrength * 0.2
       this.slipstreamGroundMesh.setColorAt(
         index,
         this.slipstreamColor.setRGB(groundBrightness, groundBrightness * 0.08, groundBrightness * 0.78),
@@ -1106,7 +1106,7 @@ export class NeonRenderer {
       this.slipstreamDummy.scale.set(segment.halfLength * 2, 1.05 + alpha * 0.82, 1)
       this.slipstreamDummy.updateMatrix()
       this.slipstreamMesh.setMatrixAt(index, this.slipstreamDummy.matrix)
-      const brightness = 0.2 + alpha * segment.intensity * 0.32 + activeStrength * 0.16
+      const brightness = 0.14 + alpha * segment.intensity * 0.24 + activeStrength * 0.14
       this.slipstreamMesh.setColorAt(index, this.slipstreamColor.setRGB(brightness, brightness * 0.14, brightness * 0.78))
     }
     this.slipstreamMesh.instanceMatrix.needsUpdate = true
