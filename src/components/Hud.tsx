@@ -23,6 +23,7 @@ export function Hud({ race }: Props) {
   const profile = SHIP_PROFILES[player.profileId]
   const speedRatio = Math.min(1, Math.abs(player.forwardSpeed) / Math.max(1, profile.boostSpeed))
   const powerPct = `${Math.round(player.power * 100)}%`
+  const integrityPct = `${Math.round(player.integrity * 100)}%`
   const localPosition = Math.max(1, race.standings.findIndex((vehicle) => vehicle.id === player.id) + 1)
   const nextGateDistance = gapToNext(race, player)
   const nextUrgency = Math.max(0, Math.min(1, 1 - nextGateDistance / 180))
@@ -63,6 +64,13 @@ export function Hud({ race }: Props) {
         </div>
         <div className="meter power">
           <span style={{ width: `${player.power * 100}%` }} />
+        </div>
+        <div className="power-row">
+          <span className={player.telemetry.integrityCritical ? 'warning' : ''}>INTEGRITY</span>
+          <strong>{integrityPct}</strong>
+        </div>
+        <div className="meter integrity">
+          <span style={{ width: `${player.integrity * 100}%` }} />
         </div>
         <div className="meter draft">
           <span style={{ width: `${draft * 100}%` }} />
@@ -119,11 +127,16 @@ export function Hud({ race }: Props) {
         <div className="hud-label">RIVALS</div>
         {rivals.map((vehicle) => {
           const gap = race.rivalGaps[vehicle.id] ?? 0
+          const rivalStatus = vehicle.telemetry.integrityCritical
+            ? 'CRITICAL'
+            : vehicle.telemetry.integrityDamaged
+              ? 'DAMAGED'
+              : `${Math.round(Math.abs(vehicle.forwardSpeed))}m/s`
           return (
-            <div className={vehicle.telemetry.powerCritical ? 'rival-row warning' : 'rival-row'} key={vehicle.id}>
+            <div className={vehicle.telemetry.integrityCritical ? 'rival-row warning' : 'rival-row'} key={vehicle.id}>
               <span>{vehicle.name}</span>
               <span>{gap >= 0 ? '+' : ''}{Math.round(gap)}m</span>
-              <span>{vehicle.telemetry.powerCritical ? 'SMOKING' : `${Math.round(Math.abs(vehicle.forwardSpeed))}m/s`}</span>
+              <span>{rivalStatus}</span>
             </div>
           )
         })}
@@ -142,6 +155,8 @@ export function Hud({ race }: Props) {
         {player.slipstreamPulse > 0.05 && <span>DRAFT</span>}
         {player.knockoutRewardPulse > 0.05 && <span>KO ENERGY</span>}
         {player.packBumpPulse > 0.05 && <span>CONTACT</span>}
+        {player.powerDamagePulse > 0.05 && <span className={player.telemetry.integrityCritical ? 'warning' : ''}>INTEGRITY HIT</span>}
+        {player.telemetry.integrityCritical && <span className="warning">INTEGRITY CRITICAL</span>}
         {player.crashOutPulse > 0 && <span className="warning">CRASH OUT</span>}
       </div>
 
@@ -155,7 +170,7 @@ export function Hud({ race }: Props) {
       {player.crashOutLockRemaining > 0 && (
         <div className="crash-overlay">
           <strong>CRASH OUT</strong>
-          <span>Rebooting +{CRASH_OUT.timePenaltySeconds.toFixed(1)}s</span>
+          <span>Integrity rebooting +{CRASH_OUT.timePenaltySeconds.toFixed(1)}s</span>
           <div className="meter">
             <span style={{ width: `${100 - (player.crashOutLockRemaining / CRASH_OUT.lockSeconds) * 100}%` }} />
           </div>

@@ -104,6 +104,10 @@
   background: linear-gradient(90deg, #ffbf4a, #5dfd7a);
 }
 
+.meter.integrity span {
+  background: linear-gradient(90deg, #ff4d5d, #ffbf4a, #5dfd7a);
+}
+
 .meter.draft {
   height: 4px;
   margin-top: 8px;

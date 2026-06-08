@@ -68,13 +68,13 @@ Current delivered scope is the browser-native 3D cut:
 - Power regen throttle/coast and off-track penalty.
 - Clean-line regen bonus.
 - Rail damage and crash-out recovery.
-- Checkpoint reset, partial power restore, grace period, time penalty.
+- Checkpoint reset, partial power/integrity restore, grace period, time penalty.
 - Boost and recharge pads with swept trigger and per-ship cooldown.
 - Track-space slipstream segments, sampling, lane pull, stack cap and self-exclusion.
 - Pack-aware bot lane changes, traffic brake, pad targeting, boost and airbrake use.
 - Warmup/countdown/racing/finished/results race flow.
 - Launch boost/perfect-start feedback.
-- Standings, speed/power HUD, airbrake charge, crash-out and slipstream feedback.
+- Standings, speed/power/integrity HUD, airbrake charge, crash-out and slipstream feedback.
 - Client-side tutorial progression.
 - Source track specs for the nine s&box layouts plus a browser tutorial circuit.
 - Prototype source-style ship and track-kit GLBs for ships, gates, pads, rails, slabs, and start lines.
@@ -128,7 +128,7 @@ Tuning values were normalized from s&box scale using a `1/100` speed factor, pre
 - Airbrake exit boost fires after sufficient hold.
 - Manual boost drains Power.
 - Power recharges when not boosting.
-- Rail collision damages Power.
+- Rail collision damages Integrity.
 - Crash-out resets to checkpoint and applies penalty.
 - Slipstream appears behind fast ships and helps catch the pack.
 - Bots form traffic and overtake.

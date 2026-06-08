@@ -68,7 +68,7 @@ const steps: TutorialStep[] = [
   {
     id: 'pads',
     title: 'Pads and power',
-    body: 'Cyan pads add speed. Green pads refill Power for more boost.',
+    body: 'Cyan pads add speed. Green pads refill Power and patch Integrity.',
     goal: 'Goal: hit a speed or energy pad.',
   },
   {
@@ -80,7 +80,7 @@ const steps: TutorialStep[] = [
   {
     id: 'line',
     title: 'Hold the racing line',
-    body: 'The tutorial track is wide, but rail pressure still drains Power. Reset and recover if you drift wide.',
+    body: 'The tutorial track is wide, but rail pressure damages Integrity. Reset and recover if you drift wide.',
     goal: 'Goal: hold a clean line through the next bend.',
   },
   {

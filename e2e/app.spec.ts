@@ -74,7 +74,9 @@ const canvasPixelStats = async (page: import('@playwright/test').Page) =>
 const canvasDraftCueStats = async (page: import('@playwright/test').Page) =>
   page.evaluate(async () => {
     const canvas = document.querySelector<HTMLCanvasElement>('canvas.game-canvas')
-    if (!canvas || canvas.width === 0 || canvas.height === 0) return { magentaPixelRatio: 0, maxMagentaScore: 0 }
+    if (!canvas || canvas.width === 0 || canvas.height === 0) {
+      return { magentaPixelRatio: 0, maxMagentaScore: 0, maxRedBlueChannel: 0 }
+    }
     const image = new Image()
     image.src = canvas.toDataURL('image/png')
     await image.decode()
@@ -82,16 +84,17 @@ const canvasDraftCueStats = async (page: import('@playwright/test').Page) =>
     probe.width = 96
     probe.height = 64
     const context = probe.getContext('2d')
-    if (!context) return { magentaPixelRatio: 0, maxMagentaScore: 0 }
+    if (!context) return { magentaPixelRatio: 0, maxMagentaScore: 0, maxRedBlueChannel: 0 }
     context.drawImage(image, 0, 0, probe.width, probe.height)
     const pixels = context.getImageData(0, 0, probe.width, probe.height).data
     const xMin = Math.floor(probe.width * 0.18)
     const xMax = Math.floor(probe.width * 0.82)
-    const yMin = Math.floor(probe.height * 0.34)
-    const yMax = Math.floor(probe.height * 0.92)
+    const yMin = Math.floor(probe.height * 0.14)
+    const yMax = Math.floor(probe.height * 0.62)
     let sampledPixels = 0
     let magentaPixels = 0
     let maxMagentaScore = 0
+    let maxRedBlueChannel = 0
     for (let y = yMin; y < yMax; y += 1) {
       for (let x = xMin; x < xMax; x += 1) {
         const index = (y * probe.width + x) * 4
@@ -101,12 +104,14 @@ const canvasDraftCueStats = async (page: import('@playwright/test').Page) =>
         const magentaScore = Math.min(r, b) - g
         sampledPixels += 1
         maxMagentaScore = Math.max(maxMagentaScore, magentaScore)
+        maxRedBlueChannel = Math.max(maxRedBlueChannel, Math.min(r, b))
         if (r > 105 && b > 95 && magentaScore > 28) magentaPixels += 1
       }
     }
     return {
       magentaPixelRatio: magentaPixels / Math.max(1, sampledPixels),
       maxMagentaScore,
+      maxRedBlueChannel,
     }
   })
 
@@ -389,6 +394,7 @@ test('starts a playable 3D race and renders canvas pixels', async ({ page }) => 
   await releaseThrottle(page)
 
   await expect(page.getByTestId('hud')).toContainText('POWER')
+  await expect(page.getByTestId('hud')).toContainText('INTEGRITY')
   await expect.poll(() => canvasHasNonBlankPixels(page)).toBe(true)
   await expect.poll(async () => {
     const stats = await canvasPixelStats(page)
@@ -492,6 +498,7 @@ test('starts a playable source-authored inversion track', async ({ page }) => {
         renderedSlipstreamSegmentCount?: number
         renderedSlipstreamGroundBandCount?: number
         slipstreamSegmentCount?: number
+        rivalDraftWakeCount?: number
       }
     }).__NEON_RENDER_STATS
     return (
@@ -500,12 +507,13 @@ test('starts a playable source-authored inversion track', async ({ page }) => {
       (stats?.playerSlipstreamVisualStrength ?? 0) > 0 &&
       (stats?.renderedSlipstreamSegmentCount ?? 0) > 0 &&
       (stats?.renderedSlipstreamGroundBandCount ?? 0) > 0 &&
+      (stats?.rivalDraftWakeCount ?? 0) > 0 &&
       (stats?.slipstreamSegmentCount ?? 0) > (stats?.renderedSlipstreamSegmentCount ?? 0)
     )
   }), { timeout: 4_000 }).toBe(true)
   await expect.poll(async () => {
     const stats = await canvasDraftCueStats(page)
-    return stats.magentaPixelRatio > 0.0005 && stats.maxMagentaScore > 28
+    return stats.magentaPixelRatio > 0.0005 && stats.maxMagentaScore > 70 && stats.maxRedBlueChannel > 150
   }, { timeout: 4_000 }).toBe(true)
   await expect.poll(() => canvasHasNonBlankPixels(page)).toBe(true)
   await expect.poll(() => page.evaluate(() => {

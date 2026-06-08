@@ -25,6 +25,7 @@ export type TrackId =
   | 'inversion-ribbon'
   | 'corkscrew-relay'
   | 'looping-inferno'
+  | 'vortex-gauntlet'
 
 export type TrackProfile = {
   center: Vec3
@@ -92,6 +93,7 @@ const STUNT_TRACKS = new Set<TrackId>([
   'inversion-ribbon',
   'corkscrew-relay',
   'looping-inferno',
+  'vortex-gauntlet',
 ])
 
 const nodeAt = (nodes: SourceTrackNode[], index: number): SourceTrackNode => {

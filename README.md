@@ -9,9 +9,9 @@ This build does not run Source 2 or s&box APIs in the browser. It recreates the 
 - Tutorial Circuit plus the nine current s&box source track layouts: Neon Oval, Friend Circuit, Skyline Sprint, Banked Speedway, Gravity Loop, Helix Loop, Inversion Ribbon, Corkscrew Relay, and Looping Inferno.
 - Track-space banking, gates, pads, start grid, rails, and slipstream wake rendering.
 - Three ship profiles: Balanced, Swift, Heavy.
-- Solo pack race with five deterministic bots.
+- Solo pack race with seven deterministic bots.
 - Warmup, countdown, launch boost, racing, finish/results phase.
-- Drift/airbrake, airbrake exit boost, manual boost, power economy, rail damage, crash-out recovery.
+- Drift/airbrake, airbrake exit boost, manual boost, power economy, integrity damage, crash-out recovery.
 - Boost/recharge pads, slipstream, pack-aware bot inputs, standings, HUD, tutorial, mobile controls.
 - Prototype GLB ship and track-kit assets loaded through Three.js.
 

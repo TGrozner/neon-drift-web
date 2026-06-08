@@ -6,10 +6,11 @@ import {
   EMPTY_INPUT,
   applyLaunchBoost,
   applyPadTrigger,
-  applyPowerDamage,
+  applyIntegrityDamage,
   createVehicle,
   hasCrossedGate,
   markGatePassed,
+  syncResourceTelemetry,
   stepVehicle,
   updateLaunchBoostCharge,
   type Vehicle,
@@ -178,6 +179,26 @@ export const updateRivals = (race: RaceState): void => {
   )
 }
 
+export const applyTutorialBotAssist = (
+  race: RaceState,
+  vehicle: Vehicle,
+  input: VehicleInput,
+): VehicleInput => {
+  if (vehicle.isPlayer || race.track.id !== 'tutorial-circuit') return input
+  const player = getPlayer(race)
+  if (player.finished || vehicle.finished || (player.lap > 1 && race.raceTime > 36)) return input
+
+  const lead = progressFor(race, vehicle) - progressFor(race, player)
+  if (lead <= 6) return input
+
+  const leadRatio = Math.min(1, lead / 90)
+  return {
+    ...input,
+    throttle: Math.min(input.throttle, 0.9 - leadRatio * 0.18),
+    boost: false,
+  }
+}
+
 const nearbyVehicleCount = (race: RaceState, vehicle: Vehicle): number =>
   race.vehicles.filter((other) => {
     if (other.id === vehicle.id || other.finished) return false
@@ -245,9 +266,16 @@ const applyPackInteractions = (race: RaceState, dt: number): void => {
       a.packBumpPulse = Math.max(a.packBumpPulse, bump)
       b.packBumpPulse = Math.max(b.packBumpPulse, bump)
 
-      const damage = PACK_CONTACT.bumpPowerDamage * bump * (0.78 + Math.max(aNoseContact, bNoseContact) * 0.34)
-      applyPowerDamage(a, damage)
-      applyPowerDamage(b, damage)
+      const noseRisk = Math.max(aNoseContact, bNoseContact)
+      const closingRisk = Math.max(
+        0,
+        (strongestClosing - PACK_CONTACT.bumpDamageClosingGrace) /
+          Math.max(0.001, 1 - PACK_CONTACT.bumpDamageClosingGrace),
+      )
+      const damageScale = PACK_CONTACT.bumpSideDamageScale + (1 - PACK_CONTACT.bumpSideDamageScale) * noseRisk
+      const damage = PACK_CONTACT.bumpIntegrityDamage * bump * damageScale * (0.35 + closingRisk * 0.65)
+      applyIntegrityDamage(a, damage)
+      applyIntegrityDamage(b, damage)
     }
   }
 }
@@ -304,6 +332,8 @@ const applyRivalPassReward = (
     const afterOther = progressFor(race, other)
     if (beforePlayer <= beforeOther && afterPlayer > afterOther) {
       player.power = Math.min(1, player.power + RACE.rivalPassPowerReward)
+      player.integrity = Math.min(1, player.integrity + RACE.rivalPassIntegrityReward)
+      syncResourceTelemetry(player)
       player.rivalPassPulse = 1
       setToast(race, 'RIVAL PASSED')
       return
@@ -326,6 +356,8 @@ const applyRivalCrashOutReward = (
     const beforeOther = beforeProgress[other.id] ?? progressFor(race, other)
     if (Math.abs(beforeOther - beforePlayer) > maxRewardGap) continue
     player.power = Math.min(1, player.power + RACE.rivalCrashOutPowerReward)
+    player.integrity = Math.min(1, player.integrity + RACE.rivalCrashOutIntegrityReward)
+    syncResourceTelemetry(player)
     player.knockoutRewardPulse = 1
     setToast(race, 'KO ENERGY')
     return
@@ -391,9 +423,10 @@ export const updateRace = (
   const beforeCrashOutCounts = Object.fromEntries(race.vehicles.map((vehicle) => [vehicle.id, vehicle.crashOutCount]))
 
   for (const vehicle of race.vehicles) {
-    const input = vehicle.isPlayer
+    const baseInput = vehicle.isPlayer
       ? playerInput
       : getBotInput(race.botBrains[vehicle.id], race.track, vehicle, race.vehicles, dt)
+    const input = vehicle.isPlayer ? baseInput : applyTutorialBotAssist(race, vehicle, baseInput)
     const slipstream = sampleSlipstream(
       race.slipstream,
       race.track,
@@ -429,7 +462,7 @@ export const updateRace = (
     )
     for (const trigger of triggers) {
       applyPadTrigger(vehicle, trigger)
-      if (vehicle.isPlayer) setToast(race, trigger.pad.kind === 'boost' ? 'BOOST PAD' : 'POWER PAD')
+      if (vehicle.isPlayer) setToast(race, trigger.pad.kind === 'boost' ? 'BOOST PAD' : 'RECHARGE PAD')
     }
 
     checkGates(race, vehicle)

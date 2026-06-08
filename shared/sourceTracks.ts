@@ -36,6 +36,51 @@ const makeTutorialCircuitNodes = (): SourceTrackNode[] => {
   return nodes
 }
 
+const makeVortexGauntletNodes = (): SourceTrackNode[] => {
+  const scale = 94
+  const heightScale = 1.88
+  const values = [
+    [-620, -360, 0, 1000, 0],
+    [-470, -360, 0, 1000, 0],
+    [-320, -360, 0, 1000, 0],
+    [-170, -360, 0, 1000, 0],
+    [-36, -342, 150, 1040, 14],
+    [132, -292, 520, 1080, 52],
+    [302, -204, 1160, 1120, 112],
+    [454, -76, 2020, 1160, 172],
+    [518, 94, 2880, 1180, 204],
+    [414, 262, 3620, 1180, 212],
+    [180, 374, 4300, 1180, 206],
+    [-74, 348, 4380, 1180, 188],
+    [-270, 224, 3780, 1160, 144],
+    [-386, 38, 2600, 1140, 78],
+    [-416, -126, 1420, 1120, -18],
+    [-532, -236, 560, 1100, -82],
+    [-724, -260, 360, 1100, -150],
+    [-898, -176, 820, 1120, -202],
+    [-990, -24, 1280, 1120, -212],
+    [-952, 158, 980, 1100, -190],
+    [-1118, 250, 680, 1080, -128],
+    [-1318, 184, 360, 1060, -46],
+    [-1466, 34, 180, 1040, 42],
+    [-1562, -138, 50, 1020, 94],
+    [-1510, -282, 0, 1000, 62],
+    [-1320, -334, 0, 1000, 16],
+    [-1240, -360, 0, 1000, 0],
+    [-1085, -360, 0, 1000, 0],
+    [-930, -360, 0, 1000, 0],
+    [-775, -360, 0, 1000, 0],
+  ] as const
+
+  return values.map(([x, y, z, width, bank]) => ({
+    x: x * scale,
+    y: y * scale,
+    z: z * heightScale,
+    width,
+    bank,
+  }))
+}
+
 export const SOURCE_TRACK_SPECS: SourceTrackSpec[] = [
   {
     id: 'tutorial-circuit',
@@ -379,5 +424,18 @@ export const SOURCE_TRACK_SPECS: SourceTrackSpec[] = [
       { x: -53010, y: -24031.2, z: 0, width: 980, bank: 0 },
       { x: -42408, y: -24031.2, z: 0, width: 980, bank: 0 },
     ],
+  },
+  {
+    id: 'vortex-gauntlet',
+    name: 'Vortex Gauntlet',
+    description: 'Aggressive anti-grav gauntlet with two offset vertical loopings, a high corkscrew, and a wallride return.',
+    subdivisions: 32,
+    footprintMultiplier: 1.02,
+    heightMultiplier: 1,
+    widthMultiplier: 2.65,
+    bankMultiplier: 1,
+    allowInvertedFrame: true,
+    maxWidth: 2850,
+    nodes: makeVortexGauntletNodes(),
   },
 ]

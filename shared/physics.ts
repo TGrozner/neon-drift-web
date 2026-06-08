@@ -2,6 +2,7 @@ import {
   BANKED_CONTROL,
   CRASH_OUT,
   HOVER,
+  INTEGRITY,
   LAUNCH,
   PADS,
   POWER,
@@ -40,6 +41,8 @@ export type VehicleInput = {
 export type VehicleTelemetry = {
   speedRatio: number
   powerCritical: boolean
+  integrityCritical: boolean
+  integrityDamaged: boolean
   offTrack: boolean
   wrongWay: boolean
   railPressure: number
@@ -65,6 +68,7 @@ export type Vehicle = {
   visualBank: number
   visualPitch: number
   power: number
+  integrity: number
   boostIntensity: number
   isBoosting: boolean
   boostEmptyLockout: boolean
@@ -141,6 +145,7 @@ export const createVehicle = (
   visualBank: 0,
   visualPitch: 0,
   power: 1,
+  integrity: 1,
   boostIntensity: 0,
   isBoosting: false,
   boostEmptyLockout: false,
@@ -187,6 +192,8 @@ export const createVehicle = (
   telemetry: {
     speedRatio: 0,
     powerCritical: false,
+    integrityCritical: false,
+    integrityDamaged: false,
     offTrack: false,
     wrongWay: false,
     railPressure: 0,
@@ -290,11 +297,18 @@ export const applyLaunchBoost = (vehicle: Vehicle): void => {
   vehicle.launchThrottleWasHeld = false
 }
 
-export const applyPowerDamage = (vehicle: Vehicle, amount: number): void => {
+export const syncResourceTelemetry = (vehicle: Vehicle): void => {
+  vehicle.telemetry.powerCritical = vehicle.power <= POWER.criticalThreshold
+  vehicle.telemetry.integrityCritical = vehicle.integrity <= INTEGRITY.criticalThreshold
+  vehicle.telemetry.integrityDamaged = vehicle.integrity <= INTEGRITY.damagedThreshold
+}
+
+export const applyIntegrityDamage = (vehicle: Vehicle, amount: number): void => {
   if (amount <= 0 || vehicle.crashOutGraceRemaining > 0 || vehicle.finished) return
-  vehicle.power = saturate(vehicle.power - amount)
+  vehicle.integrity = saturate(vehicle.integrity - amount)
   vehicle.powerDamagePulse = 1
-  if (vehicle.power <= 0) crashOut(vehicle)
+  syncResourceTelemetry(vehicle)
+  if (vehicle.integrity <= 0) crashOut(vehicle)
 }
 
 const syncSweepOrigin = (vehicle: Vehicle): void => {
@@ -313,7 +327,8 @@ export const crashOut = (vehicle: Vehicle): void => {
   vehicle.distance = vehicle.lastGateDistance
   vehicle.lane = 0
   syncSweepOrigin(vehicle)
-  vehicle.power = CRASH_OUT.restorePower
+  vehicle.power = Math.max(vehicle.power, CRASH_OUT.restorePower)
+  vehicle.integrity = CRASH_OUT.restoreIntegrity
   vehicle.crashOutCount += 1
   vehicle.timePenalty += CRASH_OUT.timePenaltySeconds
   vehicle.crashOutLockRemaining = CRASH_OUT.lockSeconds
@@ -326,6 +341,7 @@ export const crashOut = (vehicle: Vehicle): void => {
   vehicle.railContactMemorySeconds = 0
   vehicle.railContactSide = 0
   vehicle.telemetry.wrongWay = false
+  syncResourceTelemetry(vehicle)
 }
 
 export const resetToLastGate = (vehicle: Vehicle): void => {
@@ -356,7 +372,9 @@ export const applyPadTrigger = (vehicle: Vehicle, trigger: PadTrigger): void => 
   }
   if (trigger.rechargeAmount > 0) {
     vehicle.power = saturate(vehicle.power + trigger.rechargeAmount)
+    vehicle.integrity = saturate(vehicle.integrity + INTEGRITY.rechargePadRepair)
     vehicle.rechargePadPulse = 1
+    syncResourceTelemetry(vehicle)
   }
 }
 
@@ -471,6 +489,7 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
 
   if (vehicle.finished) {
     vehicle.telemetry.speedRatio = Math.abs(vehicle.forwardSpeed) / Math.max(1, profile.boostSpeed)
+    syncResourceTelemetry(vehicle)
     return
   }
 
@@ -480,6 +499,7 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
     vehicle.visualPitch = approach(vehicle.visualPitch, 0, 9, dt)
     vehicle.telemetry.wrongWay = false
     vehicle.telemetry.airbrakeExitCharge = calculateAirbrakeExitCharge(vehicle, input)
+    syncResourceTelemetry(vehicle)
     return
   }
 
@@ -528,6 +548,7 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
     }
     vehicle.power = saturate(vehicle.power + regen * dt)
   }
+  syncResourceTelemetry(vehicle)
 
   if (!vehicle.isAirbraking && wasAirbraking) {
     const heldSeconds = vehicle.airbrakeHoldSeconds
@@ -709,7 +730,7 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
       const retention = hardHit ? profile.railHeavyHitRetention : profile.railGlanceRetention
       vehicle.forwardSpeed *= retention
       const speedSeverity = saturate(vehicle.forwardSpeed / Math.max(1, profile.boostSpeed))
-      applyPowerDamage(vehicle, profile.railPowerDamage + profile.railSpeedDamage * speedSeverity)
+      applyIntegrityDamage(vehicle, profile.railIntegrityDamage + profile.railSpeedIntegrityDamage * speedSeverity)
       vehicle.railDamageCooldown = TRACK_LIMITS.railDamageInterval
     }
   }
@@ -723,7 +744,11 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
     vehicle.telemetry.speedRatio >= POWER.cleanLineMinSpeedRatio
   ) {
     vehicle.power = saturate(vehicle.power + POWER.cleanLineBonus * vehicle.telemetry.cleanLineQuality * dt)
+    vehicle.integrity = saturate(vehicle.integrity + INTEGRITY.cleanLineRepair * vehicle.telemetry.cleanLineQuality * dt)
     vehicle.cleanLinePulse = Math.max(vehicle.cleanLinePulse, vehicle.telemetry.cleanLineQuality)
+  }
+  if (!currentlyOffTrack && slipstream.strength >= INTEGRITY.slipstreamRepairThreshold && vehicle.integrity < 1) {
+    vehicle.integrity = saturate(vehicle.integrity + INTEGRITY.slipstreamRepair * slipstream.strength * dt)
   }
 
   updateWrongWay(vehicle, dt)
@@ -744,7 +769,7 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
   vehicle.visualBank = approach(vehicle.visualBank, clamp(targetBank, -48 * Math.PI / 180, 48 * Math.PI / 180), 8, dt)
   vehicle.visualPitch = approach(vehicle.visualPitch, clamp(targetPitch, -12 * Math.PI / 180, 11 * Math.PI / 180), 8, dt)
   vehicle.telemetry.speedRatio = Math.abs(vehicle.forwardSpeed) / Math.max(1, profile.boostSpeed)
-  vehicle.telemetry.powerCritical = vehicle.power <= POWER.criticalThreshold
+  syncResourceTelemetry(vehicle)
   vehicle.telemetry.airbrakeExitCharge = calculateAirbrakeExitCharge(vehicle, input)
 }
 

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { SHIP_PROFILES, SLIPSTREAM } from '../shared/constants'
+import { CRASH_OUT, INTEGRITY, SHIP_PROFILES, SLIPSTREAM } from '../shared/constants'
 import {
   EMPTY_INPUT,
-  applyPowerDamage,
+  applyIntegrityDamage,
   createVehicle,
   resetToLastGate,
   stepVehicle,
@@ -302,7 +302,7 @@ describe('ship physics', () => {
   it('profiles expose distinct handling values', () => {
     expect(SHIP_PROFILES.swift.acceleration).toBeGreaterThan(SHIP_PROFILES.balanced.acceleration)
     expect(SHIP_PROFILES.heavy.maxSpeed).toBeGreaterThan(SHIP_PROFILES.balanced.maxSpeed)
-    expect(SHIP_PROFILES.heavy.railPowerDamage).toBeLessThan(SHIP_PROFILES.swift.railPowerDamage)
+    expect(SHIP_PROFILES.heavy.railIntegrityDamage).toBeLessThan(SHIP_PROFILES.swift.railIntegrityDamage)
   })
 
   it('adds banked-turn assist to steering and grip', () => {
@@ -414,21 +414,62 @@ describe('ship physics', () => {
     expect(drafted.forwardSpeed).toBeLessThan(profile.boostSpeed)
   })
 
-  it('crash-out restores checkpoint, power, grace, and penalty', () => {
+  it('applies integrity damage without draining boost power', () => {
+    const vehicle = createVehicle('ship', 'Ship', 'balanced', true, 40, 3)
+    vehicle.power = 0.72
+    vehicle.integrity = 0.68
+
+    applyIntegrityDamage(vehicle, 0.22)
+
+    expect(vehicle.power).toBe(0.72)
+    expect(vehicle.integrity).toBeCloseTo(0.46)
+    expect(vehicle.telemetry.integrityDamaged).toBe(true)
+    expect(vehicle.crashOutCount).toBe(0)
+  })
+
+  it('crash-out restores checkpoint, integrity, power floor, grace, and penalty', () => {
     const vehicle = createVehicle('ship', 'Ship', 'balanced', true, 40, 3)
     vehicle.previousDistance = 36
     vehicle.previousLane = 2
     vehicle.lastGateDistance = 25
-    applyPowerDamage(vehicle, 2)
+    vehicle.power = 0.08
+    applyIntegrityDamage(vehicle, 2)
 
     expect(vehicle.distance).toBe(25)
     expect(vehicle.lane).toBe(0)
     expect(vehicle.previousDistance).toBe(vehicle.distance)
     expect(vehicle.previousLane).toBe(vehicle.lane)
-    expect(vehicle.power).toBeGreaterThan(0.3)
+    expect(vehicle.power).toBeGreaterThanOrEqual(CRASH_OUT.restorePower)
+    expect(vehicle.integrity).toBe(CRASH_OUT.restoreIntegrity)
     expect(vehicle.crashOutCount).toBe(1)
     expect(vehicle.timePenalty).toBe(3)
     expect(vehicle.crashOutGraceRemaining).toBeGreaterThan(1)
+  })
+
+  it('repairs damaged integrity through slipstream comeback pressure', () => {
+    const vehicle = createVehicle('ship', 'Ship', 'balanced', true, 20, 0)
+    vehicle.integrity = INTEGRITY.damagedThreshold - 0.08
+    vehicle.forwardSpeed = SHIP_PROFILES.balanced.maxSpeed * 0.64
+    const drafting = {
+      strength: 0.7,
+      accelerationBonus: 0,
+      lanePull: 0,
+      activeSegments: 1,
+      stackCapped: false,
+    }
+
+    for (let i = 0; i < 120; i += 1) {
+      stepVehicle(vehicle, {
+        track: straightTestTrack,
+        input: { ...EMPTY_INPUT, throttle: 1 },
+        dt: 1 / 60,
+        slipstream: drafting,
+        nearbyVehicles: 0,
+      })
+    }
+
+    expect(vehicle.integrity).toBeGreaterThan(INTEGRITY.damagedThreshold - 0.08)
+    expect(vehicle.slipstreamPulse).toBeGreaterThan(0)
   })
 
   it('manual reset syncs swept crossing origin to the checkpoint', () => {

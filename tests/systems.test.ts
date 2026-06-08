@@ -6,7 +6,7 @@ import { FIXED_DT, RACE, SHIP_PROFILES, SLIPSTREAM } from '../shared/constants'
 import { clamp, cross3, distanceAlongForward, dot3, signedWrappedDelta, wrapDistance } from '../shared/math'
 import { EMPTY_INPUT, createVehicle } from '../shared/physics'
 import { isInsidePad, triggerTrackPads } from '../shared/pads'
-import { getPlayer, startRace, updateRace, updateRivals, updateStandings } from '../shared/race'
+import { applyTutorialBotAssist, getPlayer, startRace, updateRace, updateRivals, updateStandings } from '../shared/race'
 import { SOURCE_TRACK_SPECS } from '../shared/sourceTracks'
 import {
   createSlipstreamState,
@@ -64,7 +64,7 @@ describe('track and pads', () => {
   })
 
   it('builds every source-authored track with finite samples and valid pads', () => {
-    expect(TRACKS).toHaveLength(10)
+    expect(TRACKS).toHaveLength(11)
     expect(TRACKS[0].id).toBe('tutorial-circuit')
     for (const track of TRACKS) {
       const sourceSpec = SOURCE_TRACK_SPECS.find((spec) => spec.id === track.id)
@@ -88,6 +88,47 @@ describe('track and pads', () => {
         expect(isInsidePad(track, pad, pad.distance, pad.lane)).toBe(true)
       }
     }
+  })
+
+  it('includes the Vortex Gauntlet as a high-inversion stunt track', () => {
+    const vortex = TRACKS.find((track) => track.id === 'vortex-gauntlet')
+    const spec = SOURCE_TRACK_SPECS.find((track) => track.id === 'vortex-gauntlet')
+
+    expect(vortex?.name).toBe('Vortex Gauntlet')
+    expect(spec?.allowInvertedFrame).toBe(true)
+    const nodeBanks = spec?.nodes.map((node) => node.bank) ?? []
+    expect(Math.max(...nodeBanks)).toBeGreaterThan(205)
+    expect(Math.min(...nodeBanks)).toBeLessThan(-205)
+
+    const sampledHeights: number[] = []
+    const sampledUpY: number[] = []
+    const sampledCenters: { x: number; y: number; z: number }[] = []
+    const sampleCount = 96
+    for (let i = 0; i < sampleCount; i += 1) {
+      const profile = vortex?.sample(((vortex?.totalLength ?? 0) * i) / sampleCount)
+      if (!profile) continue
+      sampledHeights.push(profile.center.y)
+      sampledUpY.push(profile.up.y)
+      sampledCenters.push(profile.center)
+    }
+
+    expect(Math.max(...sampledHeights) - Math.min(...sampledHeights)).toBeGreaterThan(60)
+    expect(Math.min(...sampledUpY)).toBeLessThan(-0.65)
+
+    let closestNonLocalDistance = Number.POSITIVE_INFINITY
+    for (let i = 0; i < sampledCenters.length; i += 1) {
+      for (let j = i + 1; j < sampledCenters.length; j += 1) {
+        const wrappedGap = Math.min(j - i, sampledCenters.length - (j - i))
+        if (wrappedGap < 8) continue
+        const a = sampledCenters[i]
+        const b = sampledCenters[j]
+        closestNonLocalDistance = Math.min(
+          closestNonLocalDistance,
+          Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z),
+        )
+      }
+    }
+    expect(closestNonLocalDistance).toBeGreaterThan(22)
   })
 
   it('makes the tutorial circuit wider and less crowded than the baseline oval', () => {
@@ -389,6 +430,24 @@ describe('bot ai', () => {
     expect(maxBotYaw).toBeLessThan(1.2)
     expect(fullLockFrames).toBe(0)
   })
+
+  it('softens tutorial bots that are already ahead of the player', () => {
+    const race = startRace('balanced', 'tutorial-circuit')
+    race.phase = 'racing'
+    race.raceTime = 8
+    const player = getPlayer(race)
+    const bot = race.vehicles[1]
+    if (!bot) throw new Error('Missing bot')
+    player.distance = 30
+    bot.distance = 78
+
+    const input = { throttle: 1, steer: 0.36, boost: true, airbrake: false, reset: false }
+    const assisted = applyTutorialBotAssist(race, bot, input)
+
+    expect(assisted.throttle).toBeLessThan(0.9)
+    expect(assisted.boost).toBe(false)
+    expect(assisted.steer).toBe(input.steer)
+  })
 })
 
 describe('race flow', () => {
@@ -479,12 +538,16 @@ describe('race flow', () => {
     rival.lane = 0.2
     player.forwardSpeed = 35
     rival.forwardSpeed = 20
+    player.power = 0.4
+    player.integrity = 0.7
 
     updateRace(race, { throttle: 1, steer: 0, boost: false, airbrake: false, reset: false }, 1 / 60)
 
     expect(player.packBumpPulse).toBeGreaterThan(0)
     expect(rival.packBumpPulse).toBeGreaterThan(0)
     expect(Math.abs(rival.lane - player.lane)).toBeGreaterThan(0.2)
+    expect(player.power).toBeGreaterThanOrEqual(0.4)
+    expect(player.integrity).toBeLessThan(0.7)
   })
 
   it('does not trigger pads by sweeping from a pre-reset position', () => {
@@ -513,18 +576,20 @@ describe('race flow', () => {
     player.distance = 80
     player.lane = 0
     player.power = 0.35
+    player.integrity = 0.4
     rival.distance = 84
     rival.lane = race.track.sample(rival.distance).width * 0.5
     rival.lastGateDistance = 70
     rival.forwardSpeed = SHIP_PROFILES[rival.profileId].boostSpeed
     rival.lateralSpeed = 120
-    rival.power = 0.001
+    rival.integrity = 0.001
     rival.crashOutGraceRemaining = 0
 
     updateRace(race, EMPTY_INPUT, 1 / 60)
 
     expect(rival.crashOutCount).toBe(1)
     expect(player.power).toBeGreaterThan(0.45)
+    expect(player.integrity).toBeGreaterThan(0.45)
     expect(player.knockoutRewardPulse).toBe(1)
     expect(player.rivalPassPulse).toBe(0)
     expect(race.lastToast).toBe('KO ENERGY')

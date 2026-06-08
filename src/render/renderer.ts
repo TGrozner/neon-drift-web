@@ -4,8 +4,8 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
-import { SHIP_PROFILES } from '../../shared/constants'
-import { add3, clamp, cross3, dot3, normalize3, scale3, type Vec3 } from '../../shared/math'
+import { INTEGRITY, SHIP_PROFILES, SLIPSTREAM } from '../../shared/constants'
+import { add3, clamp, cross3, dot3, normalize3, scale3, signedWrappedDelta, type Vec3 } from '../../shared/math'
 import type { RaceState } from '../../shared/race'
 import { slipstreamSegmentInfluence } from '../../shared/slipstream'
 import { trackToWorld, type RaceTrack } from '../../shared/track'
@@ -35,13 +35,17 @@ const trackKitModels = {
 
 type TrackKitModelId = keyof typeof trackKitModels
 
-const RENDERED_SLIPSTREAM_SEGMENTS = 96
+const DRAFT_FIELD_SEGMENT_LIMIT = 96
 const ENABLE_SOURCE_SHIP_MODELS = true
 const ENABLE_SOURCE_TRACK_KIT_MODELS = true
 const CAMERA_FAR_PLANE = 1050
 const SCENE_FOG_DENSITY = 0.0042
 const HORIZON_GRID_SIZE = 420
 const HORIZON_GRID_DIVISIONS = 84
+const DRAFT_FIELD_DISTANCE_SAMPLES = 60
+const DRAFT_FIELD_LANE_SAMPLES = 7
+const DRAFT_FIELD_LOOK_BACK = 20
+const DRAFT_FIELD_LOOK_AHEAD = 112
 
 export const VISUAL_LIGHTING = {
   bloomBase: 0.3,
@@ -124,8 +128,9 @@ const shouldPreserveDrawingBuffer = (): boolean =>
 
 const renderPixelRatio = (): number => Math.min(window.devicePixelRatio, 1.5)
 
-const colorForPower = (power: number): string => {
-  if (power < 0.22) return '#ffbf4a'
+const colorForShipStatus = (power: number, integrity: number): string => {
+  if (integrity <= INTEGRITY.criticalThreshold) return '#ff4d5d'
+  if (integrity <= INTEGRITY.damagedThreshold) return '#ffbf4a'
   if (power > 0.74) return '#5dfd7a'
   return '#6ce8ff'
 }
@@ -173,6 +178,7 @@ type NeonRenderStats = {
   playerSlipstreamPulse: number
   playerSlipstreamVisualBandCount: number
   playerSlipstreamVisualStrength: number
+  rivalDraftWakeCount: number
   gatePortalCount: number
   padMarkerCount: number
   trackEnvironmentInstances: number
@@ -196,15 +202,12 @@ export class NeonRenderer {
   private readonly shipMaterials = new Map<string, THREE.MeshStandardMaterial>()
   private readonly gateLines = new Map<number, THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>>()
   private readonly gatePortals = new Map<number, GatePortal>()
-  private readonly slipstreamGroup = new THREE.Group()
-  private readonly slipstreamMesh: THREE.InstancedMesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>
-  private readonly slipstreamGroundMesh: THREE.InstancedMesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>
-  private readonly slipstreamDummy = new THREE.Object3D()
-  private readonly slipstreamColor = new THREE.Color()
+  private readonly rivalDraftWakeMesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>
   private renderedSlipstreamSegmentCount = 0
   private renderedSlipstreamGroundBandCount = 0
   private playerSlipstreamVisualBandCount = 0
   private playerSlipstreamVisualStrength = 0
+  private rivalDraftWakeCount = 0
   private lastCameraUpdate = performance.now()
   private cameraTarget = new THREE.Vector3()
   private smoothedCameraForward = new THREE.Vector3()
@@ -244,42 +247,8 @@ export class NeonRenderer {
     this.composer.addPass(this.bloomPass)
     this.composer.addPass(new OutputPass())
     this.scene.fog = new THREE.FogExp2('#05060b', SCENE_FOG_DENSITY)
-    this.slipstreamMesh = new THREE.InstancedMesh(
-      new THREE.PlaneGeometry(1, 1),
-      new THREE.MeshBasicMaterial({
-        color: '#ffffff',
-        transparent: true,
-        opacity: 0.2,
-        blending: THREE.AdditiveBlending,
-        depthTest: false,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        vertexColors: true,
-      }),
-      RENDERED_SLIPSTREAM_SEGMENTS,
-    )
-    this.slipstreamMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
-    this.slipstreamMesh.renderOrder = 2
-    this.slipstreamMesh.frustumCulled = false
-    this.slipstreamGroundMesh = new THREE.InstancedMesh(
-      new THREE.PlaneGeometry(1, 1),
-      new THREE.MeshBasicMaterial({
-        color: '#ff2df4',
-        transparent: true,
-        opacity: 0.085,
-        depthTest: true,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        toneMapped: false,
-        vertexColors: true,
-      }),
-      RENDERED_SLIPSTREAM_SEGMENTS,
-    )
-    this.slipstreamGroundMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
-    this.slipstreamGroundMesh.renderOrder = 1
-    this.slipstreamGroundMesh.frustumCulled = false
-    this.slipstreamGroup.add(this.slipstreamGroundMesh, this.slipstreamMesh)
-    this.scene.add(this.slipstreamGroup)
+    this.rivalDraftWakeMesh = this.createRivalDraftWakeMesh()
+    this.scene.add(this.rivalDraftWakeMesh)
 
     const hemi = new THREE.HemisphereLight('#8be9ff', '#08030d', 0.82)
     this.scene.add(hemi)
@@ -328,6 +297,7 @@ export class NeonRenderer {
       this.updateShip(race.track, vehicle)
     }
     this.updateSlipstream(race)
+    this.updateRivalDraftWakes(race)
     this.updateGateHighlights(race)
     this.updateCamera(race)
     this.updatePostProcessing(race)
@@ -345,6 +315,7 @@ export class NeonRenderer {
       playerSlipstreamPulse: 0,
       playerSlipstreamVisualBandCount: 0,
       playerSlipstreamVisualStrength: 0,
+      rivalDraftWakeCount: 0,
       gatePortalCount: 0,
       padMarkerCount: 0,
       trackEnvironmentInstances: 0,
@@ -367,6 +338,7 @@ export class NeonRenderer {
     stats.playerSlipstreamPulse = race.vehicles.find((vehicle) => vehicle.id === race.playerId)?.slipstreamPulse ?? 0
     stats.playerSlipstreamVisualBandCount = this.playerSlipstreamVisualBandCount
     stats.playerSlipstreamVisualStrength = this.playerSlipstreamVisualStrength
+    stats.rivalDraftWakeCount = this.rivalDraftWakeCount
     stats.gatePortalCount = this.gatePortals.size
     stats.padMarkerCount = this.padMarkerCount
     stats.trackEnvironmentInstances = this.trackEnvironmentInstances
@@ -948,14 +920,27 @@ export class NeonRenderer {
 
     const material = this.shipMaterials.get(vehicle.id)
     if (material) {
-      material.emissive.set(vehicle.slipstreamPulse > 0.05 ? '#ff3df2' : vehicle.isBoosting ? '#5dfd7a' : colorForPower(vehicle.power))
-      material.emissiveIntensity = 0.32 + vehicle.boostIntensity * 0.72 + vehicle.airbrakeExitPulse * 0.82 + vehicle.slipstreamPulse * 0.24
+      material.emissive.set(
+        vehicle.slipstreamPulse > 0.05
+          ? '#ff3df2'
+          : vehicle.isBoosting
+            ? '#5dfd7a'
+            : colorForShipStatus(vehicle.power, vehicle.integrity),
+      )
+      material.emissiveIntensity = 0.32 + vehicle.boostIntensity * 0.72 + vehicle.airbrakeExitPulse * 0.82 + vehicle.slipstreamPulse * 0.48
     }
     const sourceMaterials = group.userData.sourceMaterials as THREE.MeshStandardMaterial[] | undefined
     if (sourceMaterials) {
       for (const sourceMaterial of sourceMaterials) {
-        sourceMaterial.emissive.set(vehicle.slipstreamPulse > 0.05 ? '#ff3df2' : vehicle.isBoosting ? '#5dfd7a' : colorForPower(vehicle.power))
-        sourceMaterial.emissiveIntensity = 0.14 + vehicle.boostIntensity * 0.42 + vehicle.airbrakeExitPulse * 0.48 + vehicle.slipstreamPulse * 0.16
+        sourceMaterial.emissive.set(
+          vehicle.slipstreamPulse > 0.05
+            ? '#ff3df2'
+            : vehicle.isBoosting
+              ? '#5dfd7a'
+              : colorForShipStatus(vehicle.power, vehicle.integrity),
+        )
+        sourceMaterial.emissiveIntensity =
+          0.14 + vehicle.boostIntensity * 0.42 + vehicle.airbrakeExitPulse * 0.48 + vehicle.slipstreamPulse * 0.34
       }
     }
 
@@ -965,15 +950,15 @@ export class NeonRenderer {
         vehicle.telemetry.speedRatio * 0.72 +
           vehicle.boostIntensity * 0.52 +
           vehicle.speedPadPulse * 0.34 +
-          vehicle.slipstreamPulse * 0.24,
+          vehicle.slipstreamPulse * 0.08,
         0.18,
         1.72,
       )
       trail.scale.set(0.8 + trailPower * 0.32, 0.72 + trailPower * 1.35, 0.8 + trailPower * 0.32)
-      trail.material.opacity = clamp(0.16 + trailPower * 0.28, 0.14, 0.62)
+      trail.material.opacity = clamp(0.16 + trailPower * 0.28 + vehicle.slipstreamPulse * 0.06, 0.14, 0.64)
       trail.material.color.set(
         vehicle.slipstreamPulse > 0.05
-          ? '#ff3df2'
+          ? '#c76cff'
           : vehicle.isBoosting
             ? '#5dfd7a'
             : vehicle.airbrakeExitPulse > 0.05 ? '#ffbf4a' : '#6ce8ff',
@@ -1092,31 +1077,14 @@ export class NeonRenderer {
     const player = race.vehicles.find((vehicle) => vehicle.id === race.playerId) ?? race.vehicles[0]
     const segments = race.slipstream.segments
       .filter((segment) => segment.ownerId !== race.playerId)
-      .slice(-RENDERED_SLIPSTREAM_SEGMENTS)
+      .slice(-DRAFT_FIELD_SEGMENT_LIMIT)
     this.renderedSlipstreamSegmentCount = 0
     this.renderedSlipstreamGroundBandCount = 0
     this.playerSlipstreamVisualBandCount = 0
     this.playerSlipstreamVisualStrength = 0
-    for (let index = 0; index < RENDERED_SLIPSTREAM_SEGMENTS; index += 1) {
-      const segment = segments[index]
-      if (!segment) {
-        this.slipstreamDummy.scale.set(0, 0, 0)
-        this.slipstreamDummy.updateMatrix()
-        this.slipstreamMesh.setMatrixAt(index, this.slipstreamDummy.matrix)
-        this.slipstreamGroundMesh.setMatrixAt(index, this.slipstreamDummy.matrix)
-        this.slipstreamMesh.setColorAt(index, this.slipstreamColor.setRGB(0, 0, 0))
-        this.slipstreamGroundMesh.setColorAt(index, this.slipstreamColor.setRGB(0, 0, 0))
-        continue
-      }
+    for (const segment of segments) {
       const age = race.raceTime - segment.createdAt
-      const alpha = Math.max(0, 1 - age / segment.lifetime)
-      if (alpha <= 0) {
-        this.slipstreamDummy.scale.set(0, 0, 0)
-        this.slipstreamDummy.updateMatrix()
-        this.slipstreamMesh.setMatrixAt(index, this.slipstreamDummy.matrix)
-        this.slipstreamGroundMesh.setMatrixAt(index, this.slipstreamDummy.matrix)
-        this.slipstreamMesh.setColorAt(index, this.slipstreamColor.setRGB(0, 0, 0))
-        this.slipstreamGroundMesh.setColorAt(index, this.slipstreamColor.setRGB(0, 0, 0))
+      if (age < 0 || age > segment.lifetime) {
         continue
       }
       const influence = slipstreamSegmentInfluence(
@@ -1133,31 +1101,116 @@ export class NeonRenderer {
       }
       this.renderedSlipstreamSegmentCount += 1
       this.renderedSlipstreamGroundBandCount += 1
-      const profile = race.track.sample(segment.centerDistance)
-      this.slipstreamDummy.position.copy(toThree(trackToWorld(race.track, segment.centerDistance, segment.lane, 0.48)))
-      this.applyBasis(this.slipstreamDummy, profile.tangent, profile.right, profile.up)
-      this.slipstreamDummy.scale.set(segment.halfLength * 2, segment.halfWidth * 2, 1)
-      this.slipstreamDummy.updateMatrix()
-      this.slipstreamGroundMesh.setMatrixAt(index, this.slipstreamDummy.matrix)
-      const activeStrength = clamp(influence.strength, 0, 1)
-      const groundBrightness = 0.2 + alpha * segment.intensity * 0.19 + activeStrength * 0.2
-      this.slipstreamGroundMesh.setColorAt(
-        index,
-        this.slipstreamColor.setRGB(groundBrightness, groundBrightness * 0.08, groundBrightness * 0.78),
-      )
-
-      this.slipstreamDummy.position.copy(toThree(trackToWorld(race.track, segment.centerDistance, segment.lane, 1.05)))
-      this.applyBasis(this.slipstreamDummy, profile.tangent, profile.up, profile.right)
-      this.slipstreamDummy.scale.set(segment.halfLength * 2, 1.05 + alpha * 0.82, 1)
-      this.slipstreamDummy.updateMatrix()
-      this.slipstreamMesh.setMatrixAt(index, this.slipstreamDummy.matrix)
-      const brightness = 0.14 + alpha * segment.intensity * 0.24 + activeStrength * 0.14
-      this.slipstreamMesh.setColorAt(index, this.slipstreamColor.setRGB(brightness, brightness * 0.14, brightness * 0.78))
     }
-    this.slipstreamMesh.instanceMatrix.needsUpdate = true
-    if (this.slipstreamMesh.instanceColor) this.slipstreamMesh.instanceColor.needsUpdate = true
-    this.slipstreamGroundMesh.instanceMatrix.needsUpdate = true
-    if (this.slipstreamGroundMesh.instanceColor) this.slipstreamGroundMesh.instanceColor.needsUpdate = true
+  }
+
+  private updateRivalDraftWakes(race: RaceState): void {
+    const player = race.vehicles.find((vehicle) => vehicle.id === race.playerId) ?? race.vehicles[0]
+    const sampleLength = DRAFT_FIELD_LOOK_BACK + DRAFT_FIELD_LOOK_AHEAD
+    const windowCenter = player.distance + (DRAFT_FIELD_LOOK_AHEAD - DRAFT_FIELD_LOOK_BACK) * 0.5
+    const windowHalfLength = sampleLength * 0.5
+    const segments = race.slipstream.segments
+      .filter((segment) => {
+        const age = race.raceTime - segment.createdAt
+        if (segment.trackId !== race.track.id || segment.ownerId === player.id || age < 0 || age > segment.lifetime) {
+          return false
+        }
+        const distanceFromWindow = Math.abs(signedWrappedDelta(windowCenter, segment.centerDistance, race.track.totalLength))
+        return distanceFromWindow <= windowHalfLength + segment.halfLength
+      })
+      .slice(-DRAFT_FIELD_SEGMENT_LIMIT)
+    const geometry = this.rivalDraftWakeMesh.geometry
+    const positionAttribute = geometry.getAttribute('position') as THREE.BufferAttribute
+    const colorAttribute = geometry.getAttribute('color') as THREE.BufferAttribute
+    const positions = positionAttribute.array as Float32Array
+    const colors = colorAttribute.array as Float32Array
+    const laneSpan = race.track.width * 0.72
+    let activeVertices = 0
+
+    for (let row = 0; row <= DRAFT_FIELD_DISTANCE_SAMPLES; row += 1) {
+      const distanceT = row / DRAFT_FIELD_DISTANCE_SAMPLES
+      const distance = player.distance - DRAFT_FIELD_LOOK_BACK + sampleLength * distanceT
+
+      for (let column = 0; column < DRAFT_FIELD_LANE_SAMPLES; column += 1) {
+        const laneT = column / Math.max(1, DRAFT_FIELD_LANE_SAMPLES - 1)
+        const lane = (laneT - 0.5) * laneSpan
+        let strength = 0
+        for (const segment of segments) {
+          strength += slipstreamSegmentInfluence(
+            segment,
+            race.track,
+            player.id,
+            distance,
+            lane,
+            race.raceTime,
+          ).strength
+          if (strength >= SLIPSTREAM.stackCap) {
+            strength = SLIPSTREAM.stackCap
+            break
+          }
+        }
+        const normalizedStrength = clamp(strength / SLIPSTREAM.stackCap, 0, 1)
+        const position = trackToWorld(race.track, distance, lane, 0.58 + normalizedStrength * 0.2)
+        const index = (row * DRAFT_FIELD_LANE_SAMPLES + column) * 3
+        positions[index] = position.x
+        positions[index + 1] = position.y
+        positions[index + 2] = position.z
+
+        const visualStrength = normalizedStrength * 0.62
+        colors[index] = visualStrength
+        colors[index + 1] = visualStrength * 0.015
+        colors[index + 2] = visualStrength * 0.86
+        if (normalizedStrength > 0.035) activeVertices += 1
+      }
+    }
+
+    positionAttribute.needsUpdate = true
+    colorAttribute.needsUpdate = true
+    this.rivalDraftWakeMesh.visible = activeVertices > 0
+    this.rivalDraftWakeCount = activeVertices
+  }
+
+  private createRivalDraftWakeMesh(): THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial> {
+    const vertexCount = (DRAFT_FIELD_DISTANCE_SAMPLES + 1) * DRAFT_FIELD_LANE_SAMPLES
+    const positions = new Float32Array(vertexCount * 3)
+    const colors = new Float32Array(vertexCount * 3)
+    const indices: number[] = []
+    for (let row = 0; row < DRAFT_FIELD_DISTANCE_SAMPLES; row += 1) {
+      for (let column = 0; column < DRAFT_FIELD_LANE_SAMPLES - 1; column += 1) {
+        const base = row * DRAFT_FIELD_LANE_SAMPLES + column
+        const next = base + DRAFT_FIELD_LANE_SAMPLES
+        indices.push(base, base + 1, next, base + 1, next + 1, next)
+      }
+    }
+
+    const geometry = new THREE.BufferGeometry()
+    const positionAttribute = new THREE.BufferAttribute(positions, 3)
+    const colorAttribute = new THREE.BufferAttribute(colors, 3)
+    positionAttribute.setUsage(THREE.DynamicDrawUsage)
+    colorAttribute.setUsage(THREE.DynamicDrawUsage)
+    geometry.setAttribute('position', positionAttribute)
+    geometry.setAttribute('color', colorAttribute)
+    geometry.setIndex(indices)
+
+    const mesh = new THREE.Mesh(
+      geometry,
+      new THREE.MeshBasicMaterial({
+        color: '#ffffff',
+        transparent: true,
+        opacity: 0.42,
+        blending: THREE.AdditiveBlending,
+        depthTest: false,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        toneMapped: false,
+        vertexColors: true,
+      }),
+    )
+    mesh.name = 'rival-draft-wake-field'
+    mesh.renderOrder = 3
+    mesh.frustumCulled = false
+    mesh.visible = false
+    return mesh
   }
 
   private updateGateHighlights(race: RaceState): void {

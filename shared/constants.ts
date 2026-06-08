@@ -28,8 +28,8 @@ export type ShipProfile = {
   boostActivationThreshold: number
   boostContinueThreshold: number
   boostRiskDrainScale: number
-  railPowerDamage: number
-  railSpeedDamage: number
+  railIntegrityDamage: number
+  railSpeedIntegrityDamage: number
   railGlanceRetention: number
   railHeavyHitRetention: number
   airbrakeExitMinSeconds: number
@@ -76,8 +76,8 @@ export const SHIP_PROFILES: Record<ShipProfileId, ShipProfile> = {
     turnRate: (174 * Math.PI) / 180,
     strafeForce: scaled(1400),
     boostDrainRate: 0.2,
-    railPowerDamage: 0.068,
-    railSpeedDamage: 0.06,
+    railIntegrityDamage: 0.068,
+    railSpeedIntegrityDamage: 0.06,
     railGlanceRetention: 0.89,
     railHeavyHitRetention: 0.72,
     airbrakeExitBoostImpulse: scaled(3050),
@@ -98,8 +98,8 @@ export const SHIP_PROFILES: Record<ShipProfileId, ShipProfile> = {
     turnRate: (194 * Math.PI) / 180,
     strafeForce: scaled(1550),
     boostDrainRate: 0.24,
-    railPowerDamage: 0.086,
-    railSpeedDamage: 0.074,
+    railIntegrityDamage: 0.086,
+    railSpeedIntegrityDamage: 0.074,
     railGlanceRetention: 0.85,
     railHeavyHitRetention: 0.67,
     airbrakeExitBoostImpulse: scaled(3200),
@@ -120,8 +120,8 @@ export const SHIP_PROFILES: Record<ShipProfileId, ShipProfile> = {
     turnRate: (148 * Math.PI) / 180,
     strafeForce: scaled(1120),
     boostDrainRate: 0.16,
-    railPowerDamage: 0.047,
-    railSpeedDamage: 0.043,
+    railIntegrityDamage: 0.047,
+    railSpeedIntegrityDamage: 0.043,
     railGlanceRetention: 0.93,
     railHeavyHitRetention: 0.82,
     airbrakeExitBoostImpulse: scaled(2850),
@@ -139,8 +139,18 @@ export const POWER = {
   cleanLineMinSpeedRatio: 0.52,
 }
 
+export const INTEGRITY = {
+  criticalThreshold: 0.24,
+  damagedThreshold: 0.58,
+  rechargePadRepair: 0.08,
+  cleanLineRepair: 0.018,
+  slipstreamRepair: 0.012,
+  slipstreamRepairThreshold: 0.34,
+}
+
 export const CRASH_OUT = {
   restorePower: 0.35,
+  restoreIntegrity: 0.58,
   lockSeconds: 0.95,
   stallSeconds: 0.48,
   respawnSpeed: scaled(1180),
@@ -158,7 +168,9 @@ export const RACE = {
   totalLaps: 3,
   gateCount: 8,
   rivalPassPowerReward: 0.08,
+  rivalPassIntegrityReward: 0.035,
   rivalCrashOutPowerReward: 0.12,
+  rivalCrashOutIntegrityReward: 0.06,
 }
 
 export const PADS = {
@@ -207,7 +219,9 @@ export const PACK_CONTACT = {
   bumpSpeedLoss: 0.56,
   bumpSideRetentionBonus: 0.035,
   bumpMinRetention: 0.92,
-  bumpPowerDamage: 0.014,
+  bumpIntegrityDamage: 0.014,
+  bumpDamageClosingGrace: 0.08,
+  bumpSideDamageScale: 0.45,
 }
 
 export const LAUNCH = {
