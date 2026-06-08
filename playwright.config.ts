@@ -12,6 +12,8 @@ const webServerCommand = useProductionBuild
 export default defineConfig({
   testDir: './e2e',
   timeout: 45_000,
+  fullyParallel: true,
+  workers: process.env.CI ? 4 : undefined,
   webServer: {
     command: webServerCommand,
     url: baseURL,
