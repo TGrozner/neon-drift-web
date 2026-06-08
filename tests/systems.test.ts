@@ -27,7 +27,7 @@ import {
 } from '../src/components/touchControlMath'
 import { shouldAdvanceTutorial } from '../src/components/tutorialProgress'
 import { applyTouchCommand, applyTouchSteer, createTouchState } from '../src/hooks/useNeonGame'
-import { createRenderBasis } from '../src/render/renderer'
+import { VISUAL_LIGHTING, createRenderBasis } from '../src/render/renderer'
 
 const angleBetweenDegrees = (
   a: { x: number; y: number; z: number },
@@ -631,6 +631,17 @@ describe('race flow', () => {
 })
 
 describe('browser integration helpers', () => {
+  it('keeps global bloom and gate lighting under readable caps', () => {
+    expect(VISUAL_LIGHTING.bloomBase + VISUAL_LIGHTING.bloomBoost).toBeLessThanOrEqual(0.55)
+    expect(VISUAL_LIGHTING.exposureBase + VISUAL_LIGHTING.exposureBoost).toBeLessThanOrEqual(0.92)
+    expect(
+      VISUAL_LIGHTING.nextGateBeamBaseEmissive + VISUAL_LIGHTING.nextGateBeamPulseEmissive,
+    ).toBeLessThanOrEqual(0.9)
+    expect(VISUAL_LIGHTING.padChevronEmissive).toBeLessThan(1)
+    expect(VISUAL_LIGHTING.railEmissive).toBeLessThan(VISUAL_LIGHTING.padBaseEmissive)
+    expect(VISUAL_LIGHTING.sourceTrackRailEmissive).toBeLessThan(VISUAL_LIGHTING.sourceTrackStrongEmissive)
+  })
+
   it('builds right-handed render bases from authored track frames', () => {
     for (const track of TRACKS) {
       for (let i = 0; i < 16; i += 1) {

@@ -43,6 +43,48 @@ const SCENE_FOG_DENSITY = 0.0042
 const HORIZON_GRID_SIZE = 420
 const HORIZON_GRID_DIVISIONS = 84
 
+export const VISUAL_LIGHTING = {
+  bloomBase: 0.3,
+  bloomBoost: 0.22,
+  bloomRadiusBase: 0.31,
+  bloomRadiusBoost: 0.1,
+  exposureBase: 0.86,
+  exposureBoost: 0.04,
+  trackEdgeOpacity: 0.36,
+  guideSideOpacity: 0.2,
+  guideCenterOpacity: 0.18,
+  environmentBeaconEmissive: 0.82,
+  startLineEmissive: 0.56,
+  gatePostBaseEmissive: 0.54,
+  gateBeamBaseEmissive: 0.58,
+  gateLineBaseOpacity: 0.32,
+  padBaseEmissive: 0.62,
+  padChevronEmissive: 0.86,
+  sourceTrackStrongEmissive: 0.42,
+  sourceTrackRailEmissive: 0.28,
+  sourceTrackMutedEmissive: 0.24,
+  slabEmissive: 0.22,
+  railEmissive: 0.32,
+  nextGateLineBaseOpacity: 0.42,
+  nextGateLinePulseOpacity: 0.14,
+  nextGatePostBaseEmissive: 0.5,
+  nextGatePostPulseEmissive: 0.22,
+  nextGateBeamBaseEmissive: 0.58,
+  nextGateBeamPulseEmissive: 0.3,
+  lastGateLineOpacity: 0.2,
+  lastGatePostEmissive: 0.34,
+  lastGateBeamEmissive: 0.42,
+  idleGateLineOpacity: 0.14,
+  idleGatePostEmissive: 0.22,
+  idleGateBeamEmissive: 0.26,
+} as const
+
+const sourceTrackKitEmissiveIntensity = (modelId: TrackKitModelId): number => {
+  if (modelId === 'trackRail') return VISUAL_LIGHTING.sourceTrackRailEmissive
+  if (modelId === 'gatePost' || modelId === 'trackSlab') return VISUAL_LIGHTING.sourceTrackMutedEmissive
+  return VISUAL_LIGHTING.sourceTrackStrongEmissive
+}
+
 const loadModel = (url: string): Promise<THREE.Group> => {
   const cached = modelCache.get(url)
   if (cached) return cached
@@ -194,11 +236,11 @@ export class NeonRenderer {
     this.renderer.setPixelRatio(renderPixelRatio())
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
-    this.renderer.toneMappingExposure = 0.9
+    this.renderer.toneMappingExposure = VISUAL_LIGHTING.exposureBase
     this.renderer.setClearColor('#05060b')
     this.composer = new EffectComposer(this.renderer)
     this.composer.addPass(new RenderPass(this.scene, this.camera))
-    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.36, 0.42, 0.28)
+    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), VISUAL_LIGHTING.bloomBase, VISUAL_LIGHTING.bloomRadiusBase, 0.28)
     this.composer.addPass(this.bloomPass)
     this.composer.addPass(new OutputPass())
     this.scene.fog = new THREE.FogExp2('#05060b', SCENE_FOG_DENSITY)
@@ -399,7 +441,11 @@ export class NeonRenderer {
     )
     root.add(trackMesh)
 
-    const edgeMaterial = new THREE.LineBasicMaterial({ color: '#6ce8ff', transparent: true, opacity: 0.48 })
+    const edgeMaterial = new THREE.LineBasicMaterial({
+      color: '#6ce8ff',
+      transparent: true,
+      opacity: VISUAL_LIGHTING.trackEdgeOpacity,
+    })
     for (const side of [-1, 1]) {
       const points: THREE.Vector3[] = []
       for (let i = 0; i <= samples; i += 1) {
@@ -428,7 +474,7 @@ export class NeonRenderer {
       new THREE.MeshStandardMaterial({
         color: '#ff3df2',
         emissive: '#4d1049',
-        emissiveIntensity: 0.9,
+        emissiveIntensity: VISUAL_LIGHTING.startLineEmissive,
         roughness: 0.38,
         metalness: 0.22,
       }),
@@ -455,9 +501,9 @@ export class NeonRenderer {
   private addTrackGuideStrips(root: THREE.Group, track: RaceTrack): void {
     const samples = 260
     const guides = [
-      { laneRatio: -0.26, color: '#274f66', opacity: 0.26 },
-      { laneRatio: 0, color: '#ffbf4a', opacity: 0.24 },
-      { laneRatio: 0.26, color: '#274f66', opacity: 0.26 },
+      { laneRatio: -0.26, color: '#274f66', opacity: VISUAL_LIGHTING.guideSideOpacity },
+      { laneRatio: 0, color: '#ffbf4a', opacity: VISUAL_LIGHTING.guideCenterOpacity },
+      { laneRatio: 0.26, color: '#274f66', opacity: VISUAL_LIGHTING.guideSideOpacity },
     ]
     for (const guide of guides) {
       const points: THREE.Vector3[] = []
@@ -489,7 +535,7 @@ export class NeonRenderer {
         roughness: 0.38,
         metalness: 0.28,
         emissive: '#2be4ff',
-        emissiveIntensity: 1.25,
+        emissiveIntensity: VISUAL_LIGHTING.environmentBeaconEmissive,
       }),
       beaconCount,
     )
@@ -521,14 +567,14 @@ export class NeonRenderer {
       roughness: 0.42,
       metalness: 0.48,
       emissive: '#3b0d45',
-      emissiveIntensity: 0.82,
+      emissiveIntensity: VISUAL_LIGHTING.gatePostBaseEmissive,
     })
     const beamMaterial = new THREE.MeshStandardMaterial({
       color: '#ff3df2',
       roughness: 0.32,
       metalness: 0.38,
       emissive: '#ff3df2',
-      emissiveIntensity: 0.88,
+      emissiveIntensity: VISUAL_LIGHTING.gateBeamBaseEmissive,
     })
     const postGeometry = new THREE.BoxGeometry(0.62, 5.8, 0.62)
     for (const lane of [profile.width * 0.5 + 0.84, -profile.width * 0.5 - 0.84]) {
@@ -583,7 +629,7 @@ export class NeonRenderer {
     const gateMaterial = new THREE.LineBasicMaterial({
       color: '#ff3df2',
       transparent: true,
-      opacity: 0.42,
+      opacity: VISUAL_LIGHTING.gateLineBaseOpacity,
       toneMapped: false,
     })
     const gateLine = new THREE.LineSegments(gateGeometry, gateMaterial)
@@ -607,7 +653,7 @@ export class NeonRenderer {
       new THREE.MeshStandardMaterial({
         color,
         emissive,
-        emissiveIntensity: 0.9,
+        emissiveIntensity: VISUAL_LIGHTING.padBaseEmissive,
         roughness: 0.34,
         metalness: 0.28,
         transparent: true,
@@ -619,7 +665,7 @@ export class NeonRenderer {
     const chevronMaterial = new THREE.MeshStandardMaterial({
       color: '#f7fbff',
       emissive: color,
-      emissiveIntensity: 1.25,
+      emissiveIntensity: VISUAL_LIGHTING.padChevronEmissive,
       roughness: 0.24,
       metalness: 0.18,
     })
@@ -779,8 +825,7 @@ export class NeonRenderer {
       if ('color' in emissiveMaterial) emissiveMaterial.color = new THREE.Color('#ffffff')
     }
     emissiveMaterial.emissive = new THREE.Color(color)
-    emissiveMaterial.emissiveIntensity =
-      modelId === 'gatePost' || modelId === 'trackSlab' ? 0.32 : 0.56
+    emissiveMaterial.emissiveIntensity = sourceTrackKitEmissiveIntensity(modelId)
     emissiveMaterial.toneMapped = false
   }
 
@@ -796,7 +841,7 @@ export class NeonRenderer {
         roughness: 0.7,
         metalness: 0.16,
         emissive: '#081927',
-        emissiveIntensity: 0.32,
+        emissiveIntensity: VISUAL_LIGHTING.slabEmissive,
       }),
       segmentCount,
     )
@@ -807,7 +852,7 @@ export class NeonRenderer {
         roughness: 0.5,
         metalness: 0.34,
         emissive: '#0d3d54',
-        emissiveIntensity: 0.5,
+        emissiveIntensity: VISUAL_LIGHTING.railEmissive,
       }),
       segmentCount * 2,
     )
@@ -1123,33 +1168,35 @@ export class NeonRenderer {
       const portal = this.gatePortals.get(index)
       if (index === player.nextGateIndex) {
         material.color.set('#fff27a')
-        material.opacity = 0.54 + pulse * 0.18
+        material.opacity = VISUAL_LIGHTING.nextGateLineBaseOpacity + pulse * VISUAL_LIGHTING.nextGateLinePulseOpacity
         portal?.postMaterial.emissive.set('#6ce8ff')
         portal?.beamMaterial.color.set('#fff27a')
         portal?.beamMaterial.emissive.set('#fff27a')
         if (portal) {
-          portal.postMaterial.emissiveIntensity = 0.72 + pulse * 0.34
-          portal.beamMaterial.emissiveIntensity = 0.82 + pulse * 0.46
+          portal.postMaterial.emissiveIntensity =
+            VISUAL_LIGHTING.nextGatePostBaseEmissive + pulse * VISUAL_LIGHTING.nextGatePostPulseEmissive
+          portal.beamMaterial.emissiveIntensity =
+            VISUAL_LIGHTING.nextGateBeamBaseEmissive + pulse * VISUAL_LIGHTING.nextGateBeamPulseEmissive
         }
       } else if (index === player.lastGateIndex) {
         material.color.set('#5dfd7a')
-        material.opacity = 0.26
+        material.opacity = VISUAL_LIGHTING.lastGateLineOpacity
         portal?.postMaterial.emissive.set('#174d25')
         portal?.beamMaterial.color.set('#5dfd7a')
         portal?.beamMaterial.emissive.set('#5dfd7a')
         if (portal) {
-          portal.postMaterial.emissiveIntensity = 0.5
-          portal.beamMaterial.emissiveIntensity = 0.62
+          portal.postMaterial.emissiveIntensity = VISUAL_LIGHTING.lastGatePostEmissive
+          portal.beamMaterial.emissiveIntensity = VISUAL_LIGHTING.lastGateBeamEmissive
         }
       } else {
         material.color.set('#ff3df2')
-        material.opacity = 0.18
+        material.opacity = VISUAL_LIGHTING.idleGateLineOpacity
         portal?.postMaterial.emissive.set('#35103d')
         portal?.beamMaterial.color.set('#ff3df2')
         portal?.beamMaterial.emissive.set('#ff3df2')
         if (portal) {
-          portal.postMaterial.emissiveIntensity = 0.34
-          portal.beamMaterial.emissiveIntensity = 0.38
+          portal.postMaterial.emissiveIntensity = VISUAL_LIGHTING.idleGatePostEmissive
+          portal.beamMaterial.emissiveIntensity = VISUAL_LIGHTING.idleGateBeamEmissive
         }
       }
     }
@@ -1167,9 +1214,9 @@ export class NeonRenderer {
       0,
       1,
     )
-    this.bloomPass.strength = 0.34 + energy * 0.28
-    this.bloomPass.radius = 0.34 + energy * 0.12
-    this.renderer.toneMappingExposure = 0.9 + energy * 0.06
+    this.bloomPass.strength = VISUAL_LIGHTING.bloomBase + energy * VISUAL_LIGHTING.bloomBoost
+    this.bloomPass.radius = VISUAL_LIGHTING.bloomRadiusBase + energy * VISUAL_LIGHTING.bloomRadiusBoost
+    this.renderer.toneMappingExposure = VISUAL_LIGHTING.exposureBase + energy * VISUAL_LIGHTING.exposureBoost
   }
 
   private disposeObject(object: THREE.Object3D): void {
