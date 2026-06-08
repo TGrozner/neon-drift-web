@@ -473,6 +473,7 @@ test('starts a playable source-authored inversion track', async ({ page }) => {
   await page.getByTestId('start-race').click()
   await focusRace(page)
   await holdThrottle(page)
+  await expectMoving(page)
   await expect.poll(async () => (
     await page.locator('.event-strip span').allTextContents()
   ).includes('DRAFT'), { timeout: 8_000 }).toBe(true)
@@ -496,8 +497,6 @@ test('starts a playable source-authored inversion track', async ({ page }) => {
     const stats = await canvasDraftCueStats(page)
     return stats.magentaPixelRatio
   }, { timeout: 4_000 }).toBeGreaterThan(0.01)
-  await page.waitForTimeout(4300)
-  await expectMoving(page)
   await expect.poll(() => canvasHasNonBlankPixels(page)).toBe(true)
   await expect.poll(() => page.evaluate(() => {
     const stats = (window as Window & typeof globalThis & {
