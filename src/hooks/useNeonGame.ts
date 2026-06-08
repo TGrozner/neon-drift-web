@@ -19,6 +19,19 @@ type KeyState = {
   reset: boolean
 }
 
+type NeonInputDebug = {
+  pressedKeyCount: number
+  touchThrottle: number
+  touchSteer: number
+  touchBoost: boolean
+  touchAirbrake: boolean
+}
+
+type NeonDebugWindow = Window & typeof globalThis & {
+  __NEON_E2E__?: boolean
+  __NEON_INPUT_STATE__?: NeonInputDebug
+}
+
 export type TouchState = KeyState & {
   left: boolean
   right: boolean
@@ -50,6 +63,22 @@ const STEER_LEFT = 1
 const STEER_RIGHT = -1
 const REACT_PUBLISH_INTERVAL_MS = 50
 const clampInput = (value: number): number => clamp(value, -1, 1)
+
+const shouldPublishInputDebug = (): boolean =>
+  new URLSearchParams(window.location.search).has('e2e') ||
+  Boolean((window as NeonDebugWindow).__NEON_E2E__)
+
+const publishInputDebug = (pressedKeys: Set<string>, touch: TouchState): void => {
+  if (!shouldPublishInputDebug()) return
+  const debugWindow = window as NeonDebugWindow
+  debugWindow.__NEON_INPUT_STATE__ = {
+    pressedKeyCount: pressedKeys.size,
+    touchThrottle: touch.throttle,
+    touchSteer: touch.steer,
+    touchBoost: touch.boost,
+    touchAirbrake: touch.airbrake,
+  }
+}
 
 export const applyTouchCommand = (
   touch: TouchState,
@@ -104,6 +133,7 @@ export const useNeonGame = () => {
     const clearInputState = () => {
       pressedKeysRef.current.clear()
       touchRef.current = createTouchState()
+      publishInputDebug(pressedKeysRef.current, touchRef.current)
     }
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') clearInputState()
@@ -111,6 +141,7 @@ export const useNeonGame = () => {
     const onKeyDown = (event: KeyboardEvent) => {
       pressedKeysRef.current.add(event.code)
       pressedKeysRef.current.add(normalizeKey(event))
+      publishInputDebug(pressedKeysRef.current, touchRef.current)
       if (
         ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code) ||
         [' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)
@@ -121,7 +152,9 @@ export const useNeonGame = () => {
     const onKeyUp = (event: KeyboardEvent) => {
       pressedKeysRef.current.delete(event.code)
       pressedKeysRef.current.delete(normalizeKey(event))
+      publishInputDebug(pressedKeysRef.current, touchRef.current)
     }
+    publishInputDebug(pressedKeysRef.current, touchRef.current)
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
     window.addEventListener('blur', clearInputState)
@@ -173,6 +206,7 @@ export const useNeonGame = () => {
     nextPublishTimeRef.current = 0
     pressedKeysRef.current.clear()
     touchRef.current = createTouchState()
+    publishInputDebug(pressedKeysRef.current, touchRef.current)
     setView((current) => ({
       race: raceRef.current,
       version: (current.version + 1) % 1_000_000,
@@ -181,14 +215,17 @@ export const useNeonGame = () => {
 
   const setTouch = useCallback((command: TouchCommand, active: boolean) => {
     applyTouchCommand(touchRef.current, command, active)
+    publishInputDebug(pressedKeysRef.current, touchRef.current)
   }, [])
 
   const setTouchSteer = useCallback((steer: number) => {
     applyTouchSteer(touchRef.current, steer)
+    publishInputDebug(pressedKeysRef.current, touchRef.current)
   }, [])
 
   const reset = useCallback(() => {
     touchRef.current.reset = true
+    publishInputDebug(pressedKeysRef.current, touchRef.current)
   }, [])
 
   const menu = useCallback(() => {
@@ -197,6 +234,7 @@ export const useNeonGame = () => {
     nextPublishTimeRef.current = 0
     pressedKeysRef.current.clear()
     touchRef.current = createTouchState()
+    publishInputDebug(pressedKeysRef.current, touchRef.current)
     setView((current) => ({
       race: raceRef.current,
       version: (current.version + 1) % 1_000_000,

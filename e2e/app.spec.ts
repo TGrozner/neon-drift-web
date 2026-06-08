@@ -113,6 +113,14 @@ const canvasDraftCueStats = async (page: import('@playwright/test').Page) =>
 const hudSpeed = async (page: import('@playwright/test').Page) =>
   Number.parseInt((await page.locator('.speed-readout').textContent()) ?? '0', 10)
 
+const pressedKeyCount = async (page: import('@playwright/test').Page) =>
+  page.evaluate(() => {
+    const debugWindow = window as Window & typeof globalThis & {
+      __NEON_INPUT_STATE__?: { pressedKeyCount?: number }
+    }
+    return debugWindow.__NEON_INPUT_STATE__?.pressedKeyCount ?? 0
+  })
+
 const goToGame = async (page: Page, { tutorialComplete = true } = {}) => {
   if (tutorialComplete) {
     await page.addInitScript((key) => localStorage.setItem(key, 'true'), tutorialStorageKey)
@@ -349,12 +357,12 @@ test('clears held keyboard controls when the page loses focus', async ({ page })
   await page.keyboard.down('z')
 
   try {
+    await expect.poll(() => pressedKeyCount(page)).toBeGreaterThan(0)
     await expect.poll(() => hudSpeed(page), { timeout: 15_000 }).toBeGreaterThan(120)
-    const speedBeforeBlur = await hudSpeed(page)
 
     await page.evaluate(() => window.dispatchEvent(new Event('blur')))
 
-    await expect.poll(() => hudSpeed(page), { timeout: 6_000 }).toBeLessThan(speedBeforeBlur - 25)
+    await expect.poll(() => pressedKeyCount(page), { timeout: 2_000 }).toBe(0)
   } finally {
     await page.keyboard.up('z')
   }
