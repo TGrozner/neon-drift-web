@@ -517,6 +517,9 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
   const wasBoosting = vehicle.isBoosting
   vehicle.isAirbraking = input.airbrake
   if (vehicle.isAirbraking) vehicle.airbrakeHoldSeconds += dt
+  const speedSteerRatio = saturate(Math.abs(vehicle.forwardSpeed) / Math.max(1, profile.maxSpeed))
+  const steeringAuthority = 0.72 + (1 - speedSteerRatio) * 0.18 + (vehicle.isAirbraking ? 0.12 : 0)
+  const handlingSteer = steer * clamp(steeringAuthority, 0.64, vehicle.isAirbraking ? 1 : 0.92)
 
   const wantsBoost = input.boost && throttle > 0.05
   if (!wantsBoost) vehicle.boostEmptyLockout = false
@@ -534,7 +537,7 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
 
   if (vehicle.isBoosting) {
     const risk =
-      1 + Math.abs(steer) * profile.boostRiskDrainScale + currentRailPressure * 0.48 + (nearbyVehicles > 0 ? 0.12 : 0)
+      1 + Math.abs(handlingSteer) * profile.boostRiskDrainScale + currentRailPressure * 0.48 + (nearbyVehicles > 0 ? 0.12 : 0)
     vehicle.power = saturate(vehicle.power - profile.boostDrainRate * risk * dt)
     if (vehicle.power <= profile.boostContinueThreshold) {
       vehicle.power = 0
@@ -583,7 +586,7 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
   const airbrakeTurn = vehicle.isAirbraking ? profile.airbrakeTurnBoost : 1
   const bankedSteer = 1 + bankedControlRatio * BANKED_CONTROL.steerAssist
   vehicle.yawOffset = clampYawOffset(
-    vehicle.yawOffset + steer * profile.turnRate * yawScale * airbrakeTurn * bankedSteer * dt,
+    vehicle.yawOffset + handlingSteer * profile.turnRate * yawScale * airbrakeTurn * bankedSteer * dt,
   )
 
   const heading = normalize3(
@@ -624,7 +627,7 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
     }
   }
 
-  velocity = add3(velocity, scale3(headingRight, steer * profile.strafeForce * (vehicle.isAirbraking ? 1.48 : 1) * dt))
+  velocity = add3(velocity, scale3(headingRight, handlingSteer * profile.strafeForce * (vehicle.isAirbraking ? 1.48 : 1) * dt))
   const curveLookahead = Math.max(8.4, profileNow.width * 0.54)
   const curveAhead = track.sample(vehicle.distance + curveLookahead)
   const curve = cross(
@@ -760,7 +763,7 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
     saturate(Math.abs(vehicle.forwardSpeed) / Math.max(1, profile.boostSpeed)) * HOVER.speedExtraHeight
   const impactBank = vehicle.packBumpPulse * 0.18 * Math.sign(vehicle.lane || 1) + vehicle.powerDamagePulse * 0.12 * Math.sign(vehicle.lane || 1)
   const targetBank =
-    -steer * (vehicle.isAirbraking ? 42 : 31) * (Math.PI / 180) +
+    -handlingSteer * (vehicle.isAirbraking ? 42 : 31) * (Math.PI / 180) +
     vehicle.lateralSpeed * 1.2 * (Math.PI / 180) +
     impactBank
   const targetPitch =

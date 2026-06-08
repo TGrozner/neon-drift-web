@@ -46,6 +46,7 @@ const DRAFT_FIELD_DISTANCE_SAMPLES = 60
 const DRAFT_FIELD_LANE_SAMPLES = 7
 const DRAFT_FIELD_LOOK_BACK = 20
 const DRAFT_FIELD_LOOK_AHEAD = 112
+const SPECTACLE_PALETTE = ['#6ce8ff', '#ffbf4a', '#ff3df2', '#5dfd7a', '#fff27a', '#ff4d5d'] as const
 
 export const VISUAL_LIGHTING = {
   bloomBase: 0.3,
@@ -179,6 +180,10 @@ type NeonRenderStats = {
   playerSlipstreamVisualBandCount: number
   playerSlipstreamVisualStrength: number
   rivalDraftWakeCount: number
+  rainbowAccentColorCount: number
+  trackSpectacleDecorCount: number
+  boostLightningSegmentCount: number
+  playerBoostLightningStrength: number
   gatePortalCount: number
   padMarkerCount: number
   trackEnvironmentInstances: number
@@ -208,6 +213,9 @@ export class NeonRenderer {
   private playerSlipstreamVisualBandCount = 0
   private playerSlipstreamVisualStrength = 0
   private rivalDraftWakeCount = 0
+  private trackSpectacleDecorCount = 0
+  private boostLightningSegmentCount = 0
+  private playerBoostLightningStrength = 0
   private lastCameraUpdate = performance.now()
   private cameraTarget = new THREE.Vector3()
   private smoothedCameraForward = new THREE.Vector3()
@@ -293,6 +301,8 @@ export class NeonRenderer {
       this.trackId = race.track.id
     }
 
+    this.boostLightningSegmentCount = 0
+    this.playerBoostLightningStrength = 0
     for (const vehicle of race.vehicles) {
       this.updateShip(race.track, vehicle)
     }
@@ -316,6 +326,10 @@ export class NeonRenderer {
       playerSlipstreamVisualBandCount: 0,
       playerSlipstreamVisualStrength: 0,
       rivalDraftWakeCount: 0,
+      rainbowAccentColorCount: 0,
+      trackSpectacleDecorCount: 0,
+      boostLightningSegmentCount: 0,
+      playerBoostLightningStrength: 0,
       gatePortalCount: 0,
       padMarkerCount: 0,
       trackEnvironmentInstances: 0,
@@ -339,6 +353,10 @@ export class NeonRenderer {
     stats.playerSlipstreamVisualBandCount = this.playerSlipstreamVisualBandCount
     stats.playerSlipstreamVisualStrength = this.playerSlipstreamVisualStrength
     stats.rivalDraftWakeCount = this.rivalDraftWakeCount
+    stats.rainbowAccentColorCount = SPECTACLE_PALETTE.length
+    stats.trackSpectacleDecorCount = this.trackSpectacleDecorCount
+    stats.boostLightningSegmentCount = this.boostLightningSegmentCount
+    stats.playerBoostLightningStrength = this.playerBoostLightningStrength
     stats.gatePortalCount = this.gatePortals.size
     stats.padMarkerCount = this.padMarkerCount
     stats.trackEnvironmentInstances = this.trackEnvironmentInstances
@@ -368,6 +386,7 @@ export class NeonRenderer {
     this.gatePortals.clear()
     this.padMarkerCount = 0
     this.trackEnvironmentInstances = 0
+    this.trackSpectacleDecorCount = 0
     this.sourceTrackGateModelCount = 0
     this.sourceTrackGatePartModelCount = 0
     this.sourceTrackPadModelCount = 0
@@ -472,6 +491,34 @@ export class NeonRenderer {
 
   private addTrackGuideStrips(root: THREE.Group, track: RaceTrack): void {
     const samples = 260
+    const accentColor = new THREE.Color()
+    for (const [bandIndex, laneRatio] of [-0.38, 0.38].entries()) {
+      const vertices: number[] = []
+      const colors: number[] = []
+      for (let i = 0; i <= samples; i += 1) {
+        const distance = (track.totalLength * i) / samples
+        const profile = track.sample(distance)
+        const point = trackToWorld(track, distance, profile.width * laneRatio, 0.28)
+        vertices.push(point.x, point.y, point.z)
+        accentColor.set(SPECTACLE_PALETTE[(i + bandIndex * 2) % SPECTACLE_PALETTE.length])
+        colors.push(accentColor.r, accentColor.g, accentColor.b)
+      }
+      const geometry = new THREE.BufferGeometry()
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3))
+      geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+      root.add(
+        new THREE.Line(
+          geometry,
+          new THREE.LineBasicMaterial({
+            transparent: true,
+            opacity: 0.34,
+            toneMapped: false,
+            vertexColors: true,
+          }),
+        ),
+      )
+    }
+
     const guides = [
       { laneRatio: -0.26, color: '#274f66', opacity: VISUAL_LIGHTING.guideSideOpacity },
       { laneRatio: 0, color: '#ffbf4a', opacity: VISUAL_LIGHTING.guideCenterOpacity },
@@ -499,17 +546,33 @@ export class NeonRenderer {
 
   private addTrackEnvironment(root: THREE.Group, track: RaceTrack): void {
     const beaconCount = Math.round(clamp(track.totalLength / 8, 52, 150))
+    const burstCount = track.gates.length * 4 + track.pads.length * 2
     const dummy = new THREE.Object3D()
+    const instanceColor = new THREE.Color()
     const beaconMesh = new THREE.InstancedMesh(
       new THREE.BoxGeometry(1, 1, 1),
       new THREE.MeshStandardMaterial({
-        color: '#6ce8ff',
+        color: '#ffffff',
         roughness: 0.38,
         metalness: 0.28,
-        emissive: '#2be4ff',
+        emissive: '#151a34',
         emissiveIntensity: VISUAL_LIGHTING.environmentBeaconEmissive,
+        vertexColors: true,
       }),
       beaconCount,
+    )
+    const burstMesh = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshBasicMaterial({
+        color: '#ffffff',
+        transparent: true,
+        opacity: 0.45,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false,
+        vertexColors: true,
+      }),
+      burstCount,
     )
 
     for (let i = 0; i < beaconCount; i += 1) {
@@ -522,14 +585,64 @@ export class NeonRenderer {
       )
       dummy.position.copy(toThree(position))
       this.applyBasis(dummy, profile.tangent, profile.up, profile.right)
-      dummy.scale.set(0.34, 0.22, 0.92)
+      dummy.scale.set(0.3 + (i % 3) * 0.045, 0.2, 0.82 + (i % 4) * 0.12)
       dummy.updateMatrix()
       beaconMesh.setMatrixAt(i, dummy.matrix)
+      beaconMesh.setColorAt(i, instanceColor.set(SPECTACLE_PALETTE[i % SPECTACLE_PALETTE.length]))
+    }
+    let burstIndex = 0
+    const setBurst = (
+      distance: number,
+      lane: number,
+      height: number,
+      scale: THREE.Vector3,
+      colorIndex: number,
+    ) => {
+      if (burstIndex >= burstCount) return
+      const profile = track.sample(distance)
+      dummy.position.copy(toThree(trackToWorld(track, distance, lane, height)))
+      this.applyBasis(dummy, profile.tangent, profile.up, profile.right)
+      dummy.scale.copy(scale)
+      dummy.updateMatrix()
+      burstMesh.setMatrixAt(burstIndex, dummy.matrix)
+      burstMesh.setColorAt(
+        burstIndex,
+        instanceColor.set(SPECTACLE_PALETTE[colorIndex % SPECTACLE_PALETTE.length]),
+      )
+      burstIndex += 1
+    }
+    for (const gate of track.gates) {
+      for (const side of [-1, 1]) {
+        for (const tier of [0, 1]) {
+          setBurst(
+            gate.distance,
+            side * (gate.halfWidth + 1.1 + tier * 0.44),
+            1.4 + tier * 1.35,
+            new THREE.Vector3(0.14, 1.05 + tier * 0.42, 0.34),
+            gate.index + tier + (side > 0 ? 0 : 3),
+          )
+        }
+      }
+    }
+    for (const [index, pad] of track.pads.entries()) {
+      for (const side of [-1, 1]) {
+        setBurst(
+          pad.distance,
+          pad.lane + side * (pad.halfWidth + 0.46),
+          0.72,
+          new THREE.Vector3(0.12, 0.55, 0.28),
+          index + (pad.kind === 'boost' ? 0 : 2),
+        )
+      }
     }
 
     beaconMesh.instanceMatrix.needsUpdate = true
-    root.add(beaconMesh)
-    this.trackEnvironmentInstances = beaconCount
+    if (beaconMesh.instanceColor) beaconMesh.instanceColor.needsUpdate = true
+    burstMesh.instanceMatrix.needsUpdate = true
+    if (burstMesh.instanceColor) burstMesh.instanceColor.needsUpdate = true
+    root.add(beaconMesh, burstMesh)
+    this.trackEnvironmentInstances = beaconCount + burstIndex
+    this.trackSpectacleDecorCount = beaconCount + burstIndex
   }
 
   private addGatePortal(root: THREE.Group, track: RaceTrack, gate: RaceTrack['gates'][number]): void {
@@ -964,6 +1077,28 @@ export class NeonRenderer {
             : vehicle.airbrakeExitPulse > 0.05 ? '#ffbf4a' : '#6ce8ff',
       )
     }
+    const boostLightning = group.getObjectByName('boost-lightning') as THREE.Group | undefined
+    if (boostLightning) {
+      const lightningStrength = clamp(
+        vehicle.boostIntensity * 0.9 +
+          vehicle.boostStartPulse * 0.78 +
+          vehicle.speedPadPulse * 0.24 +
+          vehicle.airbrakeExitPulse * 0.22,
+        0,
+        1,
+      )
+      const materials = boostLightning.userData.materials as THREE.LineBasicMaterial[] | undefined
+      for (const lightningMaterial of materials ?? []) {
+        lightningMaterial.opacity = lightningStrength * 0.72
+      }
+      boostLightning.visible = lightningStrength > 0.035
+      boostLightning.scale.set(1 + lightningStrength * 0.55, 1 + lightningStrength * 0.2, 1 + lightningStrength * 0.38)
+      boostLightning.rotation.x = Math.sin(vehicle.distance * 0.42 + vehicle.lane) * 0.12 * lightningStrength
+      if (boostLightning.visible) {
+        this.boostLightningSegmentCount += boostLightning.userData.segmentCount as number
+      }
+      if (vehicle.isPlayer) this.playerBoostLightningStrength = lightningStrength
+    }
 
     const pulseScale = 1 + vehicle.speedPadPulse * 0.12 + vehicle.airbrakeExitPulse * 0.16
     group.scale.setScalar(pulseScale)
@@ -1003,6 +1138,7 @@ export class NeonRenderer {
     trail.rotation.z = Math.PI * 0.5
     trail.position.x = -3.05
     group.add(trail)
+    group.add(this.createBoostLightning())
 
     const fallback = new THREE.Group()
     fallback.name = 'fallback-ship-model'
@@ -1049,6 +1185,53 @@ export class NeonRenderer {
       group.add(model)
     }).catch(() => undefined)
 
+    return group
+  }
+
+  private createBoostLightning(): THREE.Group {
+    const group = new THREE.Group()
+    group.name = 'boost-lightning'
+    group.visible = false
+    const materials: THREE.LineBasicMaterial[] = []
+    let segmentCount = 0
+    const strokes = [
+      { color: '#6ce8ff', y: 0.16, z: -0.42, phase: 0 },
+      { color: '#ffbf4a', y: -0.12, z: 0.44, phase: 1 },
+      { color: '#fff27a', y: 0.06, z: 0.02, phase: 2 },
+    ]
+    for (const stroke of strokes) {
+      const sign = stroke.phase % 2 === 0 ? 1 : -1
+      const points = [
+        new THREE.Vector3(-2.05, stroke.y, stroke.z),
+        new THREE.Vector3(-2.68, stroke.y + 0.16 * sign, stroke.z * 0.68),
+        new THREE.Vector3(-3.18, stroke.y - 0.18 * sign, stroke.z * 1.18),
+        new THREE.Vector3(-4.14, stroke.y + 0.08, stroke.z * 0.36),
+      ]
+      const geometry = new THREE.BufferGeometry().setFromPoints([
+        points[0],
+        points[1],
+        points[1],
+        points[2],
+        points[2],
+        points[3],
+      ])
+      const material = new THREE.LineBasicMaterial({
+        color: stroke.color,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthTest: false,
+        depthWrite: false,
+        toneMapped: false,
+      })
+      const line = new THREE.LineSegments(geometry, material)
+      line.renderOrder = 4
+      materials.push(material)
+      group.add(line)
+      segmentCount += 3
+    }
+    group.userData.materials = materials
+    group.userData.segmentCount = segmentCount
     return group
   }
 

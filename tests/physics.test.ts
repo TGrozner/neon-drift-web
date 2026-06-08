@@ -90,8 +90,29 @@ describe('ship physics', () => {
       })
     }
 
-    expect(committedYaw).toBeGreaterThan(0.25)
+    expect(committedYaw).toBeGreaterThan(0.08)
     expect(Math.abs(vehicle.yawOffset)).toBeGreaterThan(committedYaw * 0.9)
+  })
+
+  it('keeps sustained full-lock steering from snapping into the rail', () => {
+    const track = trackById('tutorial-circuit')
+    const vehicle = createVehicle('ship', 'Ship', 'balanced', true, 20, 0)
+    vehicle.forwardSpeed = SHIP_PROFILES.balanced.maxSpeed * 0.64
+
+    for (let i = 0; i < 54; i += 1) {
+      stepVehicle(vehicle, {
+        track,
+        input: { ...EMPTY_INPUT, throttle: 1, steer: 1 },
+        dt: 1 / 60,
+        slipstream: noSlipstream,
+        nearbyVehicles: 0,
+      })
+    }
+
+    expect(Math.abs(vehicle.yawOffset)).toBeLessThan(1.05)
+    expect(vehicle.telemetry.offTrack).toBe(false)
+    expect(Math.abs(vehicle.lane)).toBeGreaterThan(track.sample(vehicle.distance).width * 0.18)
+    expect(Math.abs(vehicle.lane)).toBeLessThan(track.sample(vehicle.distance).width * 0.48)
   })
 
   it('caps combined planar speed instead of only forward speed', () => {
