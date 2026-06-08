@@ -7,7 +7,8 @@ import {
   resetToLastGate,
   stepVehicle,
 } from '../shared/physics'
-import { NEON_OVAL, trackById } from '../shared/track'
+import { distanceAlongForward } from '../shared/math'
+import { NEON_OVAL, trackById, type RaceTrack } from '../shared/track'
 
 const noSlipstream = {
   strength: 0,
@@ -15,6 +16,27 @@ const noSlipstream = {
   lanePull: 0,
   activeSegments: 0,
   stackCapped: false,
+}
+
+const straightTestTrack: RaceTrack = {
+  id: 'neon-oval',
+  name: 'Straight test track',
+  description: 'Physics-only straightaway.',
+  totalLength: 1000,
+  width: 24,
+  gates: [],
+  pads: [],
+  startGrid: [],
+  visualSegments: [],
+  sample: (distance) => ({
+    center: { x: distance, y: 0, z: 0 },
+    tangent: { x: 1, y: 0, z: 0 },
+    right: { x: 0, y: 0, z: -1 },
+    up: { x: 0, y: 1, z: 0 },
+    width: 24,
+    distance,
+    bankDegrees: 0,
+  }),
 }
 
 const bankedDistance = (): number => {
@@ -353,6 +375,43 @@ describe('ship physics', () => {
     expect(nearMax.forwardSpeed).toBeGreaterThan(SHIP_PROFILES.balanced.maxSpeed)
     expect(nearMax.forwardSpeed).toBeLessThan(SHIP_PROFILES.balanced.boostSpeed)
     expect(aboveDraft.slipstreamPulse).toBe(0)
+  })
+
+  it('turns sustained slipstream into meaningful catch-up distance', () => {
+    const profile = SHIP_PROFILES.balanced
+    const drafted = createVehicle('drafted', 'Drafted', 'balanced', true, 20, 0)
+    const solo = createVehicle('solo', 'Solo', 'balanced', true, 20, 0)
+    drafted.forwardSpeed = profile.maxSpeed * 0.86
+    solo.forwardSpeed = drafted.forwardSpeed
+    const strength = 0.85
+    const slipstream = {
+      strength,
+      accelerationBonus: SLIPSTREAM.acceleration * strength,
+      lanePull: 0,
+      activeSegments: 1,
+      stackCapped: false,
+    }
+
+    for (let i = 0; i < 180; i += 1) {
+      stepVehicle(drafted, {
+        track: straightTestTrack,
+        input: { ...EMPTY_INPUT, throttle: 1 },
+        dt: 1 / 60,
+        slipstream,
+        nearbyVehicles: 0,
+      })
+      stepVehicle(solo, {
+        track: straightTestTrack,
+        input: { ...EMPTY_INPUT, throttle: 1 },
+        dt: 1 / 60,
+        slipstream: noSlipstream,
+        nearbyVehicles: 0,
+      })
+    }
+
+    expect(distanceAlongForward(solo.distance, drafted.distance, straightTestTrack.totalLength)).toBeGreaterThan(48)
+    expect(drafted.forwardSpeed).toBeGreaterThan(solo.forwardSpeed + 16)
+    expect(drafted.forwardSpeed).toBeLessThan(profile.boostSpeed)
   })
 
   it('crash-out restores checkpoint, power, grace, and penalty', () => {

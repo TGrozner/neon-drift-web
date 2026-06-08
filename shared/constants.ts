@@ -179,11 +179,11 @@ export const SLIPSTREAM = {
   lifetime: 5.6,
   halfLength: distanceScaled(1220),
   halfWidth: distanceScaled(255),
-  acceleration: scaled(6200),
-  speedBonus: scaled(1650),
+  acceleration: scaled(7400),
+  speedBonus: scaled(2250),
   lanePull: scaled(180),
   stackCap: 0.95,
-  nearMaxFadeStart: 0.9,
+  nearMaxFadeStart: 0.94,
   maxSegments: 512,
 }
 
