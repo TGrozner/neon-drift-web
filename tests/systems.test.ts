@@ -48,7 +48,15 @@ describe('track and pads', () => {
       expect(track.gates).toHaveLength(8)
       expect(track.startGrid).toHaveLength(8)
       expect(track.visualSegments).toHaveLength((sourceSpec?.nodes.length ?? 0) * (sourceSpec?.subdivisions ?? 0))
-      expect(track.skylineTowers).toHaveLength(0)
+      expect(track.skylineTowers).toHaveLength(track.id === 'tutorial-circuit' || track.id === 'neon-oval' ? 0 : 34)
+      for (const tower of track.skylineTowers) {
+        expect(Number.isFinite(tower.position.x)).toBe(true)
+        expect(Number.isFinite(tower.position.y)).toBe(true)
+        expect(Number.isFinite(tower.position.z)).toBe(true)
+        expect(tower.scale.x).toBeGreaterThan(0)
+        expect(tower.scale.y).toBeGreaterThan(0)
+        expect(tower.scale.z).toBeGreaterThan(0)
+      }
       for (let i = 0; i < 12; i += 1) {
         const profile = track.sample((track.totalLength * i) / 12)
         expect(Number.isFinite(profile.center.x)).toBe(true)

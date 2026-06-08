@@ -6,19 +6,21 @@ This build does not run Source 2 or s&box APIs in the browser. It recreates the 
 
 ## Current Scope
 
-- 3D Neon Oval with track-space banking, gates, pads, start grid, rails, and slipstream wake rendering.
+- Tutorial Circuit plus the nine current s&box source track layouts: Neon Oval, Friend Circuit, Skyline Sprint, Banked Speedway, Gravity Loop, Helix Loop, Inversion Ribbon, Corkscrew Relay, and Looping Inferno.
+- Track-space banking, gates, pads, start grid, rails, skyline dressing, and slipstream wake rendering.
 - Three ship profiles: Balanced, Swift, Heavy.
 - Solo pack race with five deterministic bots.
 - Warmup, countdown, launch boost, racing, finish/results phase.
 - Drift/airbrake, airbrake exit boost, manual boost, power economy, rail damage, crash-out recovery.
 - Boost/recharge pads, slipstream, pack-aware bot inputs, standings, HUD, tutorial, mobile controls.
+- Prototype GLB ship and track-kit assets loaded through Three.js.
 
-Deferred from this first cut:
+Still deferred from the s&box version:
 
-- Source 2 assets and exact `.vmdl` conversion.
+- Exact Source 2 `.vmdl` runtime conversion and s&box scene loading.
 - s&box networking, Steam invite, host/client logic, editor workflows.
-- Additional source tracks beyond Neon Oval.
-- Full rigid-body 3D physics or true inversion/loop simulation.
+- Scene-authored gameplay source contracts for visible `TrackWall`, `TrackPad`, `CheckpointGate`, and `StartGridSlot` objects.
+- Full rigid-body 3D physics and exact wall/contact classification.
 
 ## Controls
 

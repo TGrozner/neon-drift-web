@@ -25,6 +25,7 @@ const shipModels = {
 const trackKitModels = {
   trackSlab: publicAsset('models/neon_drift/tracks/prototype_kit/track_slab.glb'),
   trackRail: publicAsset('models/neon_drift/tracks/prototype_kit/track_rail.glb'),
+  skylineTower: publicAsset('models/neon_drift/tracks/prototype_kit/skyline_tower.glb'),
   gatePost: publicAsset('models/neon_drift/tracks/prototype_kit/gate_post.glb'),
   gateBeam: publicAsset('models/neon_drift/tracks/prototype_kit/gate_beam.glb'),
   speedPad: publicAsset('models/neon_drift/tracks/prototype_kit/speed_pad.glb'),
@@ -474,8 +475,22 @@ export class NeonRenderer {
   }
 
   private addTrackEnvironment(root: THREE.Group, track: RaceTrack): void {
+    const sourceTowers = track.skylineTowers
+    const towerCount = sourceTowers.length > 0 ? sourceTowers.length : Math.round(clamp(track.totalLength / 14, 36, 88))
     const beaconCount = Math.round(clamp(track.totalLength / 8, 52, 150))
     const dummy = new THREE.Object3D()
+    const sourceTowerInstances: TrackKitInstance[] = []
+    const towerMesh = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshStandardMaterial({
+        color: '#171b2e',
+        roughness: 0.68,
+        metalness: 0.34,
+        emissive: '#09172c',
+        emissiveIntensity: 0.48,
+      }),
+      towerCount,
+    )
     const beaconMesh = new THREE.InstancedMesh(
       new THREE.BoxGeometry(1, 1, 1),
       new THREE.MeshStandardMaterial({
@@ -487,6 +502,33 @@ export class NeonRenderer {
       }),
       beaconCount,
     )
+
+    if (sourceTowers.length > 0) {
+      for (let i = 0; i < sourceTowers.length; i += 1) {
+        const tower = sourceTowers[i]
+        dummy.position.copy(toThree(tower.position))
+        dummy.rotation.set(0, 0, 0)
+        dummy.scale.copy(toThree(tower.scale))
+        dummy.updateMatrix()
+        towerMesh.setMatrixAt(i, dummy.matrix)
+        sourceTowerInstances.push({ matrix: dummy.matrix.clone(), color: tower.color })
+      }
+    } else {
+      for (let i = 0; i < towerCount; i += 1) {
+        const distance = (track.totalLength * (i + 0.5)) / towerCount
+        const profile = track.sample(distance)
+        const side = i % 2 === 0 ? 1 : -1
+        const rhythm = ((i * 37) % 17) / 17
+        const height = 9 + rhythm * 24
+        const offset = profile.width * 0.5 + 24 + rhythm * 26
+        const position = add3(profile.center, scale3(profile.right, offset * side))
+        dummy.position.set(position.x, Math.max(-8, profile.center.y - 5) + height * 0.5, position.z)
+        dummy.rotation.set(0, Math.atan2(profile.tangent.x, profile.tangent.z) + rhythm * 0.38, 0)
+        dummy.scale.set(1.5 + rhythm * 2.8, height, 2.2 + (1 - rhythm) * 3.1)
+        dummy.updateMatrix()
+        towerMesh.setMatrixAt(i, dummy.matrix)
+      }
+    }
 
     for (let i = 0; i < beaconCount; i += 1) {
       const distance = (track.totalLength * i) / beaconCount
@@ -503,9 +545,21 @@ export class NeonRenderer {
       beaconMesh.setMatrixAt(i, dummy.matrix)
     }
 
+    towerMesh.instanceMatrix.needsUpdate = true
     beaconMesh.instanceMatrix.needsUpdate = true
-    root.add(beaconMesh)
-    this.trackEnvironmentInstances = beaconCount
+    root.add(towerMesh, beaconMesh)
+    this.trackEnvironmentInstances = towerCount + beaconCount
+    this.expectedSourceTrackSkylineTowerModelCount = ENABLE_SOURCE_TRACK_KIT_MODELS ? sourceTowerInstances.length : 0
+    this.addSourceTrackKitInstances(
+      root,
+      'skylineTower',
+      'source-track-skyline-tower-models',
+      sourceTowerInstances,
+      towerMesh,
+      () => {
+        this.sourceTrackSkylineTowerModelCount += sourceTowerInstances.length
+      },
+    )
   }
 
   private addGatePortal(root: THREE.Group, track: RaceTrack, gate: RaceTrack['gates'][number]): void {
@@ -765,7 +819,9 @@ export class NeonRenderer {
           ? '#6ce8ff'
           : modelId === 'trackSlab'
             ? '#274f66'
-            : '#ff3df2'
+            : modelId === 'skylineTower'
+              ? '#09172c'
+              : '#ff3df2'
     const emissiveMaterial = material as THREE.MeshStandardMaterial
     if (!emissiveMaterial || !('emissive' in emissiveMaterial)) return
     if (usesInstanceColor) {
@@ -774,7 +830,7 @@ export class NeonRenderer {
     }
     emissiveMaterial.emissive = new THREE.Color(color)
     emissiveMaterial.emissiveIntensity =
-      modelId === 'gatePost' || modelId === 'trackSlab' ? 0.32 : 0.56
+      modelId === 'skylineTower' ? 0.18 : modelId === 'gatePost' || modelId === 'trackSlab' ? 0.32 : 0.56
     emissiveMaterial.toneMapped = false
   }
 

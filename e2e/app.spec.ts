@@ -517,7 +517,7 @@ test('starts a playable source-authored inversion track', async ({ page }) => {
     loaded: true,
     slabs: 640,
     rails: 1280,
-    towers: 0,
+    towers: 34,
   })
   await releaseThrottle(page)
 })

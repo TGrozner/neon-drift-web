@@ -239,6 +239,84 @@ const makeVisualSegments = (samples: TrackSample[], totalLength: number, allowIn
     }
   })
 
+const skylineTowerColors = {
+  city: '#05070b',
+  cityDim: '#040509',
+  cityCyan: '#04425c',
+  cityMagenta: '#570f52',
+} as const
+
+const skylineTowerPlacements = [
+  ['minX', -2100, 'minZ', -2250, 520, 520, 1420, skylineTowerColors.cityDim],
+  ['centerX', -2600, 'minZ', -2450, 380, 420, 960, skylineTowerColors.city],
+  ['centerX', 2300, 'minZ', -2360, 440, 390, 1180, skylineTowerColors.cityDim],
+  ['maxX', 2100, 'minZ', -1840, 500, 540, 1520, skylineTowerColors.city],
+  ['maxX', 2380, 'centerZ', -960, 360, 360, 920, skylineTowerColors.cityCyan],
+  ['maxX', 2220, 'centerZ', 1320, 560, 470, 1640, skylineTowerColors.cityDim],
+  ['centerX', 1740, 'maxZ', 2180, 460, 430, 1220, skylineTowerColors.city],
+  ['centerX', -1360, 'maxZ', 2400, 380, 380, 980, skylineTowerColors.cityDim],
+  ['minX', -2020, 'maxZ', 1900, 520, 460, 1480, skylineTowerColors.city],
+  ['minX', -2460, 'centerZ', 760, 360, 420, 900, skylineTowerColors.cityCyan],
+  ['minX', -3100, 'centerZ', -1220, 340, 360, 1180, skylineTowerColors.cityDim],
+  ['minX', -3320, 'centerZ', 1640, 300, 330, 1040, skylineTowerColors.cityCyan],
+  ['centerX', -420, 'minZ', -3060, 420, 360, 1360, skylineTowerColors.city],
+  ['centerX', 820, 'minZ', -3260, 300, 300, 880, skylineTowerColors.cityDim],
+  ['maxX', 3100, 'centerZ', -1540, 380, 360, 1180, skylineTowerColors.cityCyan],
+  ['maxX', 3300, 'centerZ', 540, 420, 400, 1360, skylineTowerColors.cityDim],
+  ['centerX', 720, 'maxZ', 3120, 360, 340, 1280, skylineTowerColors.cityCyan],
+  ['centerX', -720, 'maxZ', 3260, 330, 330, 1080, skylineTowerColors.cityDim],
+  ['minX', -2920, 'minZ', -520, 260, 300, 820, skylineTowerColors.city],
+  ['maxX', 2860, 'maxZ', -420, 280, 320, 960, skylineTowerColors.city],
+  ['centerX', -1960, 'minZ', -3450, 300, 320, 1120, skylineTowerColors.cityMagenta],
+  ['centerX', 1960, 'maxZ', 3520, 320, 340, 1320, skylineTowerColors.cityMagenta],
+  ['minX', -3650, 'minZ', 360, 240, 300, 860, skylineTowerColors.cityCyan],
+  ['maxX', 3680, 'maxZ', -680, 260, 300, 940, skylineTowerColors.cityCyan],
+  ['centerX', 3160, 'minZ', -3060, 280, 320, 1040, skylineTowerColors.cityDim],
+  ['centerX', -3040, 'maxZ', 3040, 280, 320, 1040, skylineTowerColors.cityDim],
+  ['minX', -4300, 'minZ', -1620, 260, 280, 1160, skylineTowerColors.city],
+  ['minX', -4380, 'maxZ', 920, 220, 260, 980, skylineTowerColors.cityMagenta],
+  ['maxX', 4320, 'minZ', 1260, 260, 280, 1220, skylineTowerColors.city],
+  ['maxX', 4460, 'maxZ', 1540, 240, 260, 1080, skylineTowerColors.cityCyan],
+  ['centerX', -760, 'minZ', -4120, 260, 280, 1040, skylineTowerColors.cityCyan],
+  ['centerX', 1460, 'minZ', -3980, 220, 260, 940, skylineTowerColors.cityDim],
+  ['centerX', -1540, 'maxZ', 4080, 240, 280, 1080, skylineTowerColors.city],
+  ['centerX', 460, 'maxZ', 4280, 260, 300, 1180, skylineTowerColors.cityMagenta],
+] as const
+
+const makeSkylineTowers = (trackId: TrackId, samples: TrackSample[]): SkylineTowerVisual[] => {
+  if (trackId === 'tutorial-circuit' || trackId === 'neon-oval') return []
+  const xs = samples.map((sample) => sample.center.x)
+  const zs = samples.map((sample) => sample.center.z)
+  const minX = Math.min(...xs)
+  const maxX = Math.max(...xs)
+  const minZ = Math.min(...zs)
+  const maxZ = Math.max(...zs)
+  const anchors = {
+    minX,
+    maxX,
+    centerX: (minX + maxX) * 0.5,
+    minZ,
+    maxZ,
+    centerZ: (minZ + maxZ) * 0.5,
+  }
+  const world = (sourceUnits: number): number => sourceUnits * WORLD_SCALE
+  const modelScale = (sourceUnits: number): number => sourceUnits * WORLD_SCALE * 2
+
+  return skylineTowerPlacements.map(([xAnchor, xOffset, zAnchor, zOffset, width, depth, height, color]) => ({
+    position: {
+      x: anchors[xAnchor] + world(xOffset),
+      y: world(height * 0.42),
+      z: anchors[zAnchor] + world(zOffset),
+    },
+    scale: {
+      x: modelScale(width),
+      y: modelScale(height),
+      z: modelScale(depth),
+    },
+    color,
+  }))
+}
+
 const interpolateSample = (
   samples: TrackSample[],
   totalLength: number,
@@ -404,7 +482,7 @@ const makeSourceTrack = (spec: SourceTrackSpec): RaceTrack => {
     pads: [],
     startGrid: makeStartGrid(spec.id),
     visualSegments: makeVisualSegments(samples, totalLength, spec.allowInvertedFrame),
-    skylineTowers: [],
+    skylineTowers: makeSkylineTowers(spec.id, samples),
     sample: (distance: number) => interpolateSample(samples, totalLength, distance, spec.allowInvertedFrame),
   }
   track.gates = makeGates(track)
