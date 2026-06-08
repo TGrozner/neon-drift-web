@@ -14,7 +14,7 @@ import {
 import { NEON_OVAL, TRACKS, trackToWorld } from '../shared/track'
 import { NeonAudioEngine } from '../src/audio/neonAudio'
 import { standingsForHud } from '../src/components/hudRows'
-import { applyTouchCommand, createTouchState } from '../src/hooks/useNeonGame'
+import { applyTouchCommand, applyTouchSteer, createTouchState } from '../src/hooks/useNeonGame'
 import { createRenderBasis } from '../src/render/renderer'
 
 const angleBetweenDegrees = (
@@ -48,7 +48,7 @@ describe('track and pads', () => {
       expect(track.gates).toHaveLength(8)
       expect(track.startGrid).toHaveLength(8)
       expect(track.visualSegments).toHaveLength((sourceSpec?.nodes.length ?? 0) * (sourceSpec?.subdivisions ?? 0))
-      expect(track.skylineTowers).toHaveLength(track.id === 'tutorial-circuit' || track.id === 'neon-oval' ? 0 : 34)
+      expect(track.skylineTowers).toHaveLength(0)
       for (let i = 0; i < 12; i += 1) {
         const profile = track.sample((track.totalLength * i) / 12)
         expect(Number.isFinite(profile.center.x)).toBe(true)
@@ -185,6 +185,52 @@ describe('slipstream', () => {
     expect(outside.strength).toBe(0)
     expect(old.strength).toBe(0)
   })
+
+  it('applies a published trail through the race update loop', () => {
+    const withDraft = startRace('balanced')
+    const withoutDraft = startRace('balanced')
+    for (const race of [withDraft, withoutDraft]) {
+      race.phase = 'racing'
+      race.raceTime = 1
+      const player = getPlayer(race)
+      player.distance = 72
+      player.previousDistance = 72
+      player.lane = 0
+      player.previousLane = 0
+      player.forwardSpeed = SHIP_PROFILES.balanced.maxSpeed * 0.58
+      for (const vehicle of race.vehicles) {
+        if (vehicle.isPlayer) continue
+        vehicle.distance = 180 + Number(vehicle.id.split('-')[1] ?? 0) * 16
+        vehicle.previousDistance = vehicle.distance
+        vehicle.lane = race.track.width * 0.36
+        vehicle.previousLane = vehicle.lane
+        vehicle.forwardSpeed = SHIP_PROFILES[vehicle.profileId].maxSpeed * 0.52
+      }
+    }
+
+    const draftOwner = withDraft.vehicles[1]
+    draftOwner.distance = getPlayer(withDraft).distance + SLIPSTREAM.halfLength * 1.15
+    draftOwner.previousDistance = draftOwner.distance
+    draftOwner.lane = 0
+    draftOwner.previousLane = 0
+    draftOwner.forwardSpeed = SHIP_PROFILES[draftOwner.profileId].maxSpeed
+    expect(publishSlipstream(
+      withDraft.slipstream,
+      withDraft.track,
+      draftOwner.id,
+      draftOwner.distance,
+      draftOwner.lane,
+      draftOwner.forwardSpeed,
+      SHIP_PROFILES[draftOwner.profileId].maxSpeed,
+      withDraft.raceTime,
+    )).toBe(true)
+
+    updateRace(withDraft, { throttle: 0, steer: 0, boost: false, airbrake: false, reset: false }, 1 / 60)
+    updateRace(withoutDraft, { throttle: 0, steer: 0, boost: false, airbrake: false, reset: false }, 1 / 60)
+
+    expect(getPlayer(withDraft).slipstreamPulse).toBeGreaterThan(0)
+    expect(getPlayer(withDraft).forwardSpeed).toBeGreaterThan(getPlayer(withoutDraft).forwardSpeed)
+  })
 })
 
 describe('bot ai', () => {
@@ -218,6 +264,40 @@ describe('bot ai', () => {
     const second = getBotInput(createBotBrain('bot', 0.4), NEON_OVAL, bot, [bot], 1 / 60)
     expect(first.steer).toBe(second.steer)
     expect(brain.wantsPad).toBe(true)
+  })
+
+  it('counter-steers sustained yaw instead of compounding bot spin', () => {
+    const rightYaw = createVehicle('bot', 'Bot', 'balanced', false, 0, 0)
+    rightYaw.forwardSpeed = SHIP_PROFILES.balanced.maxSpeed * 0.62
+    rightYaw.yawOffset = 0.92
+
+    const leftYaw = createVehicle('bot', 'Bot', 'balanced', false, 0, 0)
+    leftYaw.forwardSpeed = SHIP_PROFILES.balanced.maxSpeed * 0.62
+    leftYaw.yawOffset = -0.92
+
+    expect(getBotInput(createBotBrain('bot', 0.4), NEON_OVAL, rightYaw, [rightYaw], 1 / 60).steer).toBeLessThan(-0.3)
+    expect(getBotInput(createBotBrain('bot', 0.4), NEON_OVAL, leftYaw, [leftYaw], 1 / 60).steer).toBeGreaterThan(0.3)
+  })
+
+  it('keeps autonomous launch traffic out of sustained full-lock yaw', () => {
+    const race = startRace('balanced')
+    updateRace(race, { throttle: 0, steer: 0, boost: false, airbrake: false, reset: false }, 0.5)
+    updateRace(race, { throttle: 0, steer: 0, boost: false, airbrake: false, reset: false }, 3.1)
+
+    let maxBotYaw = 0
+    let fullLockFrames = 0
+    for (let frame = 0; frame < 420; frame += 1) {
+      updateRace(race, { throttle: 0, steer: 0, boost: false, airbrake: false, reset: false }, 1 / 60)
+      for (const vehicle of race.vehicles) {
+        if (vehicle.isPlayer) continue
+        const yaw = Math.abs(vehicle.yawOffset)
+        maxBotYaw = Math.max(maxBotYaw, yaw)
+        if (yaw > 1.12) fullLockFrames += 1
+      }
+    }
+
+    expect(maxBotYaw).toBeLessThan(1.2)
+    expect(fullLockFrames).toBe(0)
   })
 })
 
@@ -492,6 +572,22 @@ describe('browser integration helpers', () => {
     applyTouchCommand(touch, 'right', false)
     applyTouchCommand(touch, 'right', false)
     expect(touch.steer).toBe(1)
+  })
+
+  it('applies analog mobile touch steering without sticky left/right state', () => {
+    const touch = createTouchState()
+
+    applyTouchSteer(touch, -0.62)
+    expect(touch.steer).toBeCloseTo(-0.62)
+    expect(touch.left).toBe(false)
+    expect(touch.right).toBe(false)
+
+    applyTouchCommand(touch, 'left', true)
+    expect(touch.steer).toBe(1)
+    applyTouchSteer(touch, 0)
+    expect(touch.steer).toBe(0)
+    expect(touch.left).toBe(false)
+    expect(touch.right).toBe(false)
   })
 
   it('plays the finish cue once when results follow the finished phase', () => {

@@ -6,7 +6,7 @@ const basePath = (process.env.VITE_BASE_PATH ?? '/').replace(/\/?$/, '/')
 const baseURL = `http://${host}:${port}${basePath}`
 const useProductionBuild = process.env.PLAYWRIGHT_USE_BUILD === 'true'
 const webServerCommand = useProductionBuild
-  ? `npm run build && npm run preview -- --host ${host} --port ${port}`
+  ? `npm run build:client && npm run preview -- --host ${host} --port ${port}`
   : `npm run dev -- --host ${host} --port ${port}`
 
 export default defineConfig({

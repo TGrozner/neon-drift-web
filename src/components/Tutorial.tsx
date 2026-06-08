@@ -22,6 +22,11 @@ type TutorialStep = {
 }
 
 const storageKey = 'neon_drift_web.tutorial.v1.complete'
+const mobileControlsQuery = '(max-width: 820px)'
+const mobileControlsMatch = (): boolean =>
+  typeof window !== 'undefined' &&
+  'matchMedia' in window &&
+  window.matchMedia(mobileControlsQuery).matches
 
 const steps: TutorialStep[] = [
   {
@@ -105,14 +110,25 @@ export function Tutorial({ activeTrackId, race, raceVersion }: Props) {
   const initiallyComplete = useMemo(() => !trainingTrackActive && localStorage.getItem(storageKey) === 'true', [trainingTrackActive])
   const [index, setIndex] = useState(initiallyComplete ? steps.length : 0)
   const [acknowledged, setAcknowledged] = useState(false)
+  const [mobileControlsActive, setMobileControlsActive] = useState(mobileControlsMatch)
   const current = steps[index]
   const visible =
     trainingTrackActive &&
+    !mobileControlsActive &&
     Boolean(current) &&
     race.phase !== 'finished' &&
     race.phase !== 'results' &&
     (current?.id === 'menu' || race.phase !== 'menu')
   const awaitingAcknowledgement = visible && current?.id !== 'menu' && !acknowledged
+
+  useEffect(() => {
+    if (!('matchMedia' in window)) return undefined
+    const media = window.matchMedia(mobileControlsQuery)
+    const update = () => setMobileControlsActive(media.matches)
+    update()
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

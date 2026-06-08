@@ -32,6 +32,84 @@ const canvasHasNonBlankPixels = async (page: import('@playwright/test').Page) =>
     return false
   })
 
+const canvasPixelStats = async (page: import('@playwright/test').Page) =>
+  page.evaluate(async () => {
+    const canvas = document.querySelector<HTMLCanvasElement>('canvas.game-canvas')
+    if (!canvas || canvas.width === 0 || canvas.height === 0) {
+      return { averageLuma: 0, hotPixelRatio: 1, litPixelRatio: 0, maxChannel: 0 }
+    }
+    const image = new Image()
+    image.src = canvas.toDataURL('image/png')
+    await image.decode()
+    const probe = document.createElement('canvas')
+    probe.width = 64
+    probe.height = 64
+    const context = probe.getContext('2d')
+    if (!context) return { averageLuma: 0, hotPixelRatio: 1, litPixelRatio: 0, maxChannel: 0 }
+    context.drawImage(image, 0, 0, probe.width, probe.height)
+    const pixels = context.getImageData(0, 0, probe.width, probe.height).data
+    let lumaTotal = 0
+    let hotPixels = 0
+    let litPixels = 0
+    let maxChannel = 0
+    const pixelCount = pixels.length / 4
+    for (let index = 0; index < pixels.length; index += 4) {
+      const r = pixels[index]
+      const g = pixels[index + 1]
+      const b = pixels[index + 2]
+      maxChannel = Math.max(maxChannel, r, g, b)
+      const luma = r * 0.2126 + g * 0.7152 + b * 0.0722
+      lumaTotal += luma
+      if (luma > 180) litPixels += 1
+      if (Math.max(r, g, b) > 248 && luma > 215) hotPixels += 1
+    }
+    return {
+      averageLuma: lumaTotal / pixelCount,
+      hotPixelRatio: hotPixels / pixelCount,
+      litPixelRatio: litPixels / pixelCount,
+      maxChannel,
+    }
+  })
+
+const canvasDraftCueStats = async (page: import('@playwright/test').Page) =>
+  page.evaluate(async () => {
+    const canvas = document.querySelector<HTMLCanvasElement>('canvas.game-canvas')
+    if (!canvas || canvas.width === 0 || canvas.height === 0) return { magentaPixelRatio: 0, maxMagentaScore: 0 }
+    const image = new Image()
+    image.src = canvas.toDataURL('image/png')
+    await image.decode()
+    const probe = document.createElement('canvas')
+    probe.width = 96
+    probe.height = 64
+    const context = probe.getContext('2d')
+    if (!context) return { magentaPixelRatio: 0, maxMagentaScore: 0 }
+    context.drawImage(image, 0, 0, probe.width, probe.height)
+    const pixels = context.getImageData(0, 0, probe.width, probe.height).data
+    const xMin = Math.floor(probe.width * 0.18)
+    const xMax = Math.floor(probe.width * 0.82)
+    const yMin = Math.floor(probe.height * 0.34)
+    const yMax = Math.floor(probe.height * 0.92)
+    let sampledPixels = 0
+    let magentaPixels = 0
+    let maxMagentaScore = 0
+    for (let y = yMin; y < yMax; y += 1) {
+      for (let x = xMin; x < xMax; x += 1) {
+        const index = (y * probe.width + x) * 4
+        const r = pixels[index]
+        const g = pixels[index + 1]
+        const b = pixels[index + 2]
+        const magentaScore = Math.min(r, b) - g
+        sampledPixels += 1
+        maxMagentaScore = Math.max(maxMagentaScore, magentaScore)
+        if (r > 105 && b > 95 && magentaScore > 28) magentaPixels += 1
+      }
+    }
+    return {
+      magentaPixelRatio: magentaPixels / Math.max(1, sampledPixels),
+      maxMagentaScore,
+    }
+  })
+
 const hudSpeed = async (page: import('@playwright/test').Page) =>
   Number.parseInt((await page.locator('.speed-readout').textContent()) ?? '0', 10)
 
@@ -233,19 +311,53 @@ test('keeps the mobile event strip clear of the airbrake charge meter', async ({
   await releaseThrottle(page)
 })
 
-test('drives with mobile touch throttle', async ({ page }) => {
+test('drives with simplified mobile touch controls', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await goToGame(page)
   await page.getByTestId('start-race').click()
-  const throttle = page.getByLabel('Throttle')
-  await throttle.dispatchEvent('pointerdown', { pointerId: 7, button: 0, isPrimary: true, pointerType: 'touch' })
-  await expect(throttle).toHaveAttribute('aria-pressed', 'true')
-  await throttle.dispatchEvent('pointerleave', { pointerId: 7, button: 0, isPrimary: true, pointerType: 'touch' })
-  await expect(throttle).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('tutorial')).toBeHidden()
+
+  const steering = page.getByLabel('Steering pad')
+  await expect(steering).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Boost' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Drift airbrake' })).toBeVisible()
+
   await page.waitForTimeout(4200)
   await expect.poll(() => hudSpeed(page)).toBeGreaterThan(0)
-  await throttle.dispatchEvent('pointerup', { pointerId: 7, button: 0, isPrimary: true, pointerType: 'touch' })
-  await expect(throttle).toHaveAttribute('aria-pressed', 'false')
+
+  const steeringBox = await steering.boundingBox()
+  expect(steeringBox).not.toBeNull()
+  await page.mouse.move(steeringBox!.x + steeringBox!.width * 0.86, steeringBox!.y + steeringBox!.height * 0.5)
+  await page.mouse.down()
+  await expect.poll(async () => Number(await steering.getAttribute('aria-valuenow'))).toBeLessThan(-45)
+  await page.mouse.move(steeringBox!.x + steeringBox!.width * 0.14, steeringBox!.y + steeringBox!.height * 0.5)
+  await expect.poll(async () => Number(await steering.getAttribute('aria-valuenow'))).toBeGreaterThan(45)
+  await page.mouse.up()
+  await expect(steering).toHaveAttribute('aria-valuenow', '0')
+
+  const drift = page.getByRole('button', { name: 'Drift airbrake' })
+  await drift.dispatchEvent('pointerdown', { pointerId: 8, button: 0, isPrimary: true, pointerType: 'touch' })
+  await expect(drift).toHaveAttribute('aria-pressed', 'true')
+  await drift.dispatchEvent('pointercancel', { pointerId: 8, button: 0, isPrimary: true, pointerType: 'touch' })
+  await expect(drift).toHaveAttribute('aria-pressed', 'false')
+})
+
+test('clears held keyboard controls when the page loses focus', async ({ page }) => {
+  await goToGame(page)
+  await page.getByTestId('start-race').click()
+  await focusRace(page)
+  await page.keyboard.down('z')
+
+  try {
+    await expect.poll(() => hudSpeed(page), { timeout: 15_000 }).toBeGreaterThan(120)
+    const speedBeforeBlur = await hudSpeed(page)
+
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')))
+
+    await expect.poll(() => hudSpeed(page), { timeout: 6_000 }).toBeLessThan(speedBeforeBlur - 25)
+  } finally {
+    await page.keyboard.up('z')
+  }
 })
 
 test('starts a playable 3D race and renders canvas pixels', async ({ page }) => {
@@ -269,6 +381,14 @@ test('starts a playable 3D race and renders canvas pixels', async ({ page }) => 
 
   await expect(page.getByTestId('hud')).toContainText('POWER')
   await expect.poll(() => canvasHasNonBlankPixels(page)).toBe(true)
+  await expect.poll(async () => {
+    const stats = await canvasPixelStats(page)
+    return stats.hotPixelRatio
+  }).toBeLessThan(0.22)
+  await expect.poll(async () => {
+    const stats = await canvasPixelStats(page)
+    return stats.averageLuma
+  }).toBeLessThan(165)
   await expect.poll(() => page.evaluate(() => {
     const stats = (window as Window & typeof globalThis & {
       __NEON_RENDER_STATS?: {
@@ -283,10 +403,22 @@ test('starts a playable 3D race and renders canvas pixels', async ({ page }) => 
   }), { timeout: 10_000 }).toBeGreaterThan(0)
   await expect.poll(() => page.evaluate(() => {
     const stats = (window as Window & typeof globalThis & {
-      __NEON_RENDER_STATS?: { sourceShipCount?: number; bloomStrength?: number }
+      __NEON_RENDER_STATS?: { sourceShipCount?: number; bloomStrength?: number; toneMappingExposure?: number }
     }).__NEON_RENDER_STATS
     return stats?.bloomStrength ?? 0
-  })).toBeGreaterThan(0.6)
+  })).toBeGreaterThan(0.25)
+  await expect.poll(() => page.evaluate(() => {
+    const stats = (window as Window & typeof globalThis & {
+      __NEON_RENDER_STATS?: { bloomStrength?: number }
+    }).__NEON_RENDER_STATS
+    return stats?.bloomStrength ?? 0
+  })).toBeLessThan(0.7)
+  await expect.poll(() => page.evaluate(() => {
+    const stats = (window as Window & typeof globalThis & {
+      __NEON_RENDER_STATS?: { toneMappingExposure?: number }
+    }).__NEON_RENDER_STATS
+    return stats?.toneMappingExposure ?? 0
+  })).toBeLessThan(1)
   await expect.poll(() => page.evaluate(() => {
     const stats = (window as Window & typeof globalThis & {
       __NEON_RENDER_STATS?: { gatePortalCount?: number }
@@ -341,6 +473,29 @@ test('starts a playable source-authored inversion track', async ({ page }) => {
   await page.getByTestId('start-race').click()
   await focusRace(page)
   await holdThrottle(page)
+  await expect.poll(async () => (
+    await page.locator('.event-strip span').allTextContents()
+  ).includes('DRAFT'), { timeout: 8_000 }).toBe(true)
+  await expect.poll(() => page.evaluate(() => {
+    const stats = (window as Window & typeof globalThis & {
+      __NEON_RENDER_STATS?: {
+        playerSlipstreamPulse?: number
+        renderedSlipstreamSegmentCount?: number
+        renderedSlipstreamGroundBandCount?: number
+        slipstreamSegmentCount?: number
+      }
+    }).__NEON_RENDER_STATS
+    return (
+      (stats?.playerSlipstreamPulse ?? 0) > 0 &&
+      (stats?.renderedSlipstreamSegmentCount ?? 0) > 0 &&
+      (stats?.renderedSlipstreamGroundBandCount ?? 0) > 0 &&
+      (stats?.slipstreamSegmentCount ?? 0) > (stats?.renderedSlipstreamSegmentCount ?? 0)
+    )
+  }), { timeout: 4_000 }).toBe(true)
+  await expect.poll(async () => {
+    const stats = await canvasDraftCueStats(page)
+    return stats.magentaPixelRatio
+  }, { timeout: 4_000 }).toBeGreaterThan(0.01)
   await page.waitForTimeout(4300)
   await expectMoving(page)
   await expect.poll(() => canvasHasNonBlankPixels(page)).toBe(true)
@@ -363,7 +518,7 @@ test('starts a playable source-authored inversion track', async ({ page }) => {
     loaded: true,
     slabs: 640,
     rails: 1280,
-    towers: 34,
+    towers: 0,
   })
   await releaseThrottle(page)
 })

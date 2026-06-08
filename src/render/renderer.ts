@@ -25,7 +25,6 @@ const shipModels = {
 const trackKitModels = {
   trackSlab: publicAsset('models/neon_drift/tracks/prototype_kit/track_slab.glb'),
   trackRail: publicAsset('models/neon_drift/tracks/prototype_kit/track_rail.glb'),
-  skylineTower: publicAsset('models/neon_drift/tracks/prototype_kit/skyline_tower.glb'),
   gatePost: publicAsset('models/neon_drift/tracks/prototype_kit/gate_post.glb'),
   gateBeam: publicAsset('models/neon_drift/tracks/prototype_kit/gate_beam.glb'),
   speedPad: publicAsset('models/neon_drift/tracks/prototype_kit/speed_pad.glb'),
@@ -35,7 +34,7 @@ const trackKitModels = {
 
 type TrackKitModelId = keyof typeof trackKitModels
 
-const RENDERED_SLIPSTREAM_SEGMENTS = 24
+const RENDERED_SLIPSTREAM_SEGMENTS = 96
 const ENABLE_SOURCE_SHIP_MODELS = true
 const ENABLE_SOURCE_TRACK_KIT_MODELS = true
 
@@ -120,6 +119,11 @@ type NeonRenderStats = {
   triangles: number
   sourceShipCount: number
   bloomStrength: number
+  toneMappingExposure: number
+  slipstreamSegmentCount: number
+  renderedSlipstreamSegmentCount: number
+  renderedSlipstreamGroundBandCount: number
+  playerSlipstreamPulse: number
   gatePortalCount: number
   padMarkerCount: number
   trackEnvironmentInstances: number
@@ -146,8 +150,11 @@ export class NeonRenderer {
   private readonly gatePortals = new Map<number, GatePortal>()
   private readonly slipstreamGroup = new THREE.Group()
   private readonly slipstreamMesh: THREE.InstancedMesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>
+  private readonly slipstreamGroundMesh: THREE.InstancedMesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>
   private readonly slipstreamDummy = new THREE.Object3D()
   private readonly slipstreamColor = new THREE.Color()
+  private renderedSlipstreamSegmentCount = 0
+  private renderedSlipstreamGroundBandCount = 0
   private lastCameraUpdate = performance.now()
   private cameraTarget = new THREE.Vector3()
   private smoothedCameraForward = new THREE.Vector3()
@@ -181,21 +188,22 @@ export class NeonRenderer {
     this.renderer.setPixelRatio(renderPixelRatio())
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
-    this.renderer.toneMappingExposure = 1.08
+    this.renderer.toneMappingExposure = 0.9
     this.renderer.setClearColor('#05060b')
     this.composer = new EffectComposer(this.renderer)
     this.composer.addPass(new RenderPass(this.scene, this.camera))
-    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.72, 0.58, 0.16)
+    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.36, 0.42, 0.28)
     this.composer.addPass(this.bloomPass)
     this.composer.addPass(new OutputPass())
     this.scene.fog = new THREE.FogExp2('#05060b', 0.006)
     this.slipstreamMesh = new THREE.InstancedMesh(
       new THREE.PlaneGeometry(1, 1),
       new THREE.MeshBasicMaterial({
-        color: '#6ce8ff',
+        color: '#ffffff',
         transparent: true,
-        opacity: 0.18,
+        opacity: 0.34,
         blending: THREE.AdditiveBlending,
+        depthTest: false,
         depthWrite: false,
         side: THREE.DoubleSide,
         vertexColors: true,
@@ -203,12 +211,30 @@ export class NeonRenderer {
       RENDERED_SLIPSTREAM_SEGMENTS,
     )
     this.slipstreamMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
-    this.slipstreamGroup.add(this.slipstreamMesh)
+    this.slipstreamMesh.renderOrder = 2
+    this.slipstreamMesh.frustumCulled = false
+    this.slipstreamGroundMesh = new THREE.InstancedMesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({
+        color: '#ff2df4',
+        transparent: true,
+        opacity: 0.14,
+        depthTest: true,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        toneMapped: false,
+      }),
+      RENDERED_SLIPSTREAM_SEGMENTS,
+    )
+    this.slipstreamGroundMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+    this.slipstreamGroundMesh.renderOrder = 1
+    this.slipstreamGroundMesh.frustumCulled = false
+    this.slipstreamGroup.add(this.slipstreamGroundMesh, this.slipstreamMesh)
     this.scene.add(this.slipstreamGroup)
 
-    const hemi = new THREE.HemisphereLight('#8be9ff', '#08030d', 1.1)
+    const hemi = new THREE.HemisphereLight('#8be9ff', '#08030d', 0.82)
     this.scene.add(hemi)
-    const sun = new THREE.DirectionalLight('#ffffff', 2.1)
+    const sun = new THREE.DirectionalLight('#ffffff', 1.42)
     sun.position.set(18, 38, 24)
     this.scene.add(sun)
 
@@ -263,6 +289,11 @@ export class NeonRenderer {
       triangles: 0,
       sourceShipCount: 0,
       bloomStrength: 0,
+      toneMappingExposure: 0,
+      slipstreamSegmentCount: 0,
+      renderedSlipstreamSegmentCount: 0,
+      renderedSlipstreamGroundBandCount: 0,
+      playerSlipstreamPulse: 0,
       gatePortalCount: 0,
       padMarkerCount: 0,
       trackEnvironmentInstances: 0,
@@ -279,6 +310,11 @@ export class NeonRenderer {
     stats.triangles = this.renderer.info.render.triangles
     stats.sourceShipCount = [...this.shipGroups.values()].filter((group) => group.getObjectByName('source-ship-model')).length
     stats.bloomStrength = this.bloomPass.strength
+    stats.toneMappingExposure = this.renderer.toneMappingExposure
+    stats.slipstreamSegmentCount = race.slipstream.segments.length
+    stats.renderedSlipstreamSegmentCount = this.renderedSlipstreamSegmentCount
+    stats.renderedSlipstreamGroundBandCount = this.renderedSlipstreamGroundBandCount
+    stats.playerSlipstreamPulse = race.vehicles.find((vehicle) => vehicle.id === race.playerId)?.slipstreamPulse ?? 0
     stats.gatePortalCount = this.gatePortals.size
     stats.padMarkerCount = this.padMarkerCount
     stats.trackEnvironmentInstances = this.trackEnvironmentInstances
@@ -357,7 +393,7 @@ export class NeonRenderer {
     )
     root.add(trackMesh)
 
-    const edgeMaterial = new THREE.LineBasicMaterial({ color: '#6ce8ff', transparent: true, opacity: 0.78 })
+    const edgeMaterial = new THREE.LineBasicMaterial({ color: '#6ce8ff', transparent: true, opacity: 0.48 })
     for (const side of [-1, 1]) {
       const points: THREE.Vector3[] = []
       for (let i = 0; i <= samples; i += 1) {
@@ -413,9 +449,9 @@ export class NeonRenderer {
   private addTrackGuideStrips(root: THREE.Group, track: RaceTrack): void {
     const samples = 260
     const guides = [
-      { laneRatio: -0.26, color: '#274f66', opacity: 0.42 },
-      { laneRatio: 0, color: '#ffbf4a', opacity: 0.36 },
-      { laneRatio: 0.26, color: '#274f66', opacity: 0.42 },
+      { laneRatio: -0.26, color: '#274f66', opacity: 0.26 },
+      { laneRatio: 0, color: '#ffbf4a', opacity: 0.24 },
+      { laneRatio: 0.26, color: '#274f66', opacity: 0.26 },
     ]
     for (const guide of guides) {
       const points: THREE.Vector3[] = []
@@ -438,22 +474,8 @@ export class NeonRenderer {
   }
 
   private addTrackEnvironment(root: THREE.Group, track: RaceTrack): void {
-    const sourceTowers = track.skylineTowers
-    const towerCount = sourceTowers.length > 0 ? sourceTowers.length : Math.round(clamp(track.totalLength / 14, 36, 88))
     const beaconCount = Math.round(clamp(track.totalLength / 8, 52, 150))
     const dummy = new THREE.Object3D()
-    const sourceTowerInstances: TrackKitInstance[] = []
-    const towerMesh = new THREE.InstancedMesh(
-      new THREE.BoxGeometry(1, 1, 1),
-      new THREE.MeshStandardMaterial({
-        color: '#171b2e',
-        roughness: 0.68,
-        metalness: 0.34,
-        emissive: '#09172c',
-        emissiveIntensity: 0.48,
-      }),
-      towerCount,
-    )
     const beaconMesh = new THREE.InstancedMesh(
       new THREE.BoxGeometry(1, 1, 1),
       new THREE.MeshStandardMaterial({
@@ -465,33 +487,6 @@ export class NeonRenderer {
       }),
       beaconCount,
     )
-
-    if (sourceTowers.length > 0) {
-      for (let i = 0; i < sourceTowers.length; i += 1) {
-        const tower = sourceTowers[i]
-        dummy.position.copy(toThree(tower.position))
-        dummy.rotation.set(0, 0, 0)
-        dummy.scale.copy(toThree(tower.scale))
-        dummy.updateMatrix()
-        towerMesh.setMatrixAt(i, dummy.matrix)
-        sourceTowerInstances.push({ matrix: dummy.matrix.clone(), color: tower.color })
-      }
-    } else {
-      for (let i = 0; i < towerCount; i += 1) {
-        const distance = (track.totalLength * (i + 0.5)) / towerCount
-        const profile = track.sample(distance)
-        const side = i % 2 === 0 ? 1 : -1
-        const rhythm = ((i * 37) % 17) / 17
-        const height = 9 + rhythm * 24
-        const offset = profile.width * 0.5 + 24 + rhythm * 26
-        const position = add3(profile.center, scale3(profile.right, offset * side))
-        dummy.position.set(position.x, Math.max(-8, profile.center.y - 5) + height * 0.5, position.z)
-        dummy.rotation.set(0, Math.atan2(profile.tangent.x, profile.tangent.z) + rhythm * 0.38, 0)
-        dummy.scale.set(1.5 + rhythm * 2.8, height, 2.2 + (1 - rhythm) * 3.1)
-        dummy.updateMatrix()
-        towerMesh.setMatrixAt(i, dummy.matrix)
-      }
-    }
 
     for (let i = 0; i < beaconCount; i += 1) {
       const distance = (track.totalLength * i) / beaconCount
@@ -508,21 +503,9 @@ export class NeonRenderer {
       beaconMesh.setMatrixAt(i, dummy.matrix)
     }
 
-    towerMesh.instanceMatrix.needsUpdate = true
     beaconMesh.instanceMatrix.needsUpdate = true
-    root.add(towerMesh, beaconMesh)
-    this.trackEnvironmentInstances = towerCount + beaconCount
-    this.expectedSourceTrackSkylineTowerModelCount = ENABLE_SOURCE_TRACK_KIT_MODELS ? sourceTowerInstances.length : 0
-    this.addSourceTrackKitInstances(
-      root,
-      'skylineTower',
-      'source-track-skyline-tower-models',
-      sourceTowerInstances,
-      towerMesh,
-      () => {
-        this.sourceTrackSkylineTowerModelCount += sourceTowerInstances.length
-      },
-    )
+    root.add(beaconMesh)
+    this.trackEnvironmentInstances = beaconCount
   }
 
   private addGatePortal(root: THREE.Group, track: RaceTrack, gate: RaceTrack['gates'][number]): void {
@@ -782,9 +765,7 @@ export class NeonRenderer {
           ? '#6ce8ff'
           : modelId === 'trackSlab'
             ? '#274f66'
-            : modelId === 'skylineTower'
-              ? '#09172c'
-              : '#ff3df2'
+            : '#ff3df2'
     const emissiveMaterial = material as THREE.MeshStandardMaterial
     if (!emissiveMaterial || !('emissive' in emissiveMaterial)) return
     if (usesInstanceColor) {
@@ -793,7 +774,7 @@ export class NeonRenderer {
     }
     emissiveMaterial.emissive = new THREE.Color(color)
     emissiveMaterial.emissiveIntensity =
-      modelId === 'skylineTower' ? 0.18 : modelId === 'gatePost' || modelId === 'trackSlab' ? 0.32 : 0.56
+      modelId === 'gatePost' || modelId === 'trackSlab' ? 0.32 : 0.56
     emissiveMaterial.toneMapped = false
   }
 
@@ -916,27 +897,36 @@ export class NeonRenderer {
 
     const material = this.shipMaterials.get(vehicle.id)
     if (material) {
-      material.emissive.set(vehicle.isBoosting ? '#5dfd7a' : colorForPower(vehicle.power))
-      material.emissiveIntensity = 0.45 + vehicle.boostIntensity * 1.25 + vehicle.airbrakeExitPulse * 1.4
+      material.emissive.set(vehicle.slipstreamPulse > 0.05 ? '#ff3df2' : vehicle.isBoosting ? '#5dfd7a' : colorForPower(vehicle.power))
+      material.emissiveIntensity = 0.32 + vehicle.boostIntensity * 0.72 + vehicle.airbrakeExitPulse * 0.82 + vehicle.slipstreamPulse * 0.48
     }
     const sourceMaterials = group.userData.sourceMaterials as THREE.MeshStandardMaterial[] | undefined
     if (sourceMaterials) {
       for (const sourceMaterial of sourceMaterials) {
-        sourceMaterial.emissive.set(vehicle.isBoosting ? '#5dfd7a' : colorForPower(vehicle.power))
-        sourceMaterial.emissiveIntensity = 0.18 + vehicle.boostIntensity * 0.7 + vehicle.airbrakeExitPulse * 0.8
+        sourceMaterial.emissive.set(vehicle.slipstreamPulse > 0.05 ? '#ff3df2' : vehicle.isBoosting ? '#5dfd7a' : colorForPower(vehicle.power))
+        sourceMaterial.emissiveIntensity = 0.14 + vehicle.boostIntensity * 0.42 + vehicle.airbrakeExitPulse * 0.48 + vehicle.slipstreamPulse * 0.34
       }
     }
 
     const trail = group.getObjectByName('engine-trail') as THREE.Mesh<THREE.ConeGeometry, THREE.MeshBasicMaterial> | undefined
     if (trail) {
       const trailPower = clamp(
-        vehicle.telemetry.speedRatio * 0.72 + vehicle.boostIntensity * 0.52 + vehicle.speedPadPulse * 0.34,
+        vehicle.telemetry.speedRatio * 0.72 +
+          vehicle.boostIntensity * 0.52 +
+          vehicle.speedPadPulse * 0.34 +
+          vehicle.slipstreamPulse * 0.46,
         0.18,
-        1.7,
+        1.72,
       )
       trail.scale.set(0.8 + trailPower * 0.32, 0.72 + trailPower * 1.35, 0.8 + trailPower * 0.32)
-      trail.material.opacity = clamp(0.18 + trailPower * 0.34, 0.16, 0.72)
-      trail.material.color.set(vehicle.isBoosting ? '#5dfd7a' : vehicle.airbrakeExitPulse > 0.05 ? '#ffbf4a' : '#6ce8ff')
+      trail.material.opacity = clamp(0.16 + trailPower * 0.28, 0.14, 0.62)
+      trail.material.color.set(
+        vehicle.slipstreamPulse > 0.05
+          ? '#ff3df2'
+          : vehicle.isBoosting
+            ? '#5dfd7a'
+            : vehicle.airbrakeExitPulse > 0.05 ? '#ffbf4a' : '#6ce8ff',
+      )
     }
 
     const pulseScale = 1 + vehicle.speedPadPulse * 0.12 + vehicle.airbrakeExitPulse * 0.16
@@ -1048,29 +1038,51 @@ export class NeonRenderer {
   }
 
   private updateSlipstream(race: RaceState): void {
-    const segments = race.slipstream.segments.slice(-RENDERED_SLIPSTREAM_SEGMENTS)
+    const segments = race.slipstream.segments
+      .filter((segment) => segment.ownerId !== race.playerId)
+      .slice(-RENDERED_SLIPSTREAM_SEGMENTS)
+    this.renderedSlipstreamSegmentCount = 0
+    this.renderedSlipstreamGroundBandCount = 0
     for (let index = 0; index < RENDERED_SLIPSTREAM_SEGMENTS; index += 1) {
       const segment = segments[index]
       if (!segment) {
         this.slipstreamDummy.scale.set(0, 0, 0)
         this.slipstreamDummy.updateMatrix()
         this.slipstreamMesh.setMatrixAt(index, this.slipstreamDummy.matrix)
+        this.slipstreamGroundMesh.setMatrixAt(index, this.slipstreamDummy.matrix)
         this.slipstreamMesh.setColorAt(index, this.slipstreamColor.setRGB(0, 0, 0))
         continue
       }
       const age = race.raceTime - segment.createdAt
       const alpha = Math.max(0, 1 - age / segment.lifetime)
+      if (alpha <= 0) {
+        this.slipstreamDummy.scale.set(0, 0, 0)
+        this.slipstreamDummy.updateMatrix()
+        this.slipstreamMesh.setMatrixAt(index, this.slipstreamDummy.matrix)
+        this.slipstreamGroundMesh.setMatrixAt(index, this.slipstreamDummy.matrix)
+        this.slipstreamMesh.setColorAt(index, this.slipstreamColor.setRGB(0, 0, 0))
+        continue
+      }
+      this.renderedSlipstreamSegmentCount += 1
+      this.renderedSlipstreamGroundBandCount += 1
       const profile = race.track.sample(segment.centerDistance)
-      this.slipstreamDummy.position.copy(toThree(trackToWorld(race.track, segment.centerDistance, segment.lane, 0.55)))
+      this.slipstreamDummy.position.copy(toThree(trackToWorld(race.track, segment.centerDistance, segment.lane, 0.48)))
       this.applyBasis(this.slipstreamDummy, profile.tangent, profile.right, profile.up)
-      this.slipstreamDummy.scale.set(segment.halfLength * 2, segment.halfWidth * 2 * (1 + alpha * 0.3), 1)
+      this.slipstreamDummy.scale.set(segment.halfLength * 2.45, segment.halfWidth * 2.45 * (1 + alpha * 0.18), 1)
+      this.slipstreamDummy.updateMatrix()
+      this.slipstreamGroundMesh.setMatrixAt(index, this.slipstreamDummy.matrix)
+
+      this.slipstreamDummy.position.copy(toThree(trackToWorld(race.track, segment.centerDistance, segment.lane, 1.05)))
+      this.applyBasis(this.slipstreamDummy, profile.tangent, profile.up, profile.right)
+      this.slipstreamDummy.scale.set(segment.halfLength * 2.35, 1.7 + alpha * 1.3, 1)
       this.slipstreamDummy.updateMatrix()
       this.slipstreamMesh.setMatrixAt(index, this.slipstreamDummy.matrix)
-      const brightness = 0.18 + alpha * segment.intensity * 0.82
-      this.slipstreamMesh.setColorAt(index, this.slipstreamColor.setRGB(brightness, brightness, brightness))
+      const brightness = 0.28 + alpha * segment.intensity * 0.54
+      this.slipstreamMesh.setColorAt(index, this.slipstreamColor.setRGB(brightness, brightness * 0.14, brightness * 0.78))
     }
     this.slipstreamMesh.instanceMatrix.needsUpdate = true
     if (this.slipstreamMesh.instanceColor) this.slipstreamMesh.instanceColor.needsUpdate = true
+    this.slipstreamGroundMesh.instanceMatrix.needsUpdate = true
   }
 
   private updateGateHighlights(race: RaceState): void {
@@ -1125,9 +1137,9 @@ export class NeonRenderer {
       0,
       1,
     )
-    this.bloomPass.strength = 0.62 + energy * 0.58
-    this.bloomPass.radius = 0.48 + energy * 0.18
-    this.renderer.toneMappingExposure = 1.06 + energy * 0.12
+    this.bloomPass.strength = 0.34 + energy * 0.28
+    this.bloomPass.radius = 0.34 + energy * 0.12
+    this.renderer.toneMappingExposure = 0.9 + energy * 0.06
   }
 
   private disposeObject(object: THREE.Object3D): void {

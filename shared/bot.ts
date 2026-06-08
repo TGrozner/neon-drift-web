@@ -165,7 +165,15 @@ export const getBotInput = (
     track.sample(vehicle.distance).width * 0.42,
   )
   const laneError = targetLane - vehicle.lane
-  const steer = clamp(laneError * 0.2 - vehicle.lateralSpeed * 0.04, -1, 1)
+  const speedRatio = saturate(Math.abs(vehicle.forwardSpeed) / Math.max(1, profile.boostSpeed))
+  const laneGain = 0.16 - speedRatio * 0.045
+  const lateralDamping = 0.075 + speedRatio * 0.035
+  const yawDamping = 0.42 + speedRatio * 0.18
+  const steer = clamp(
+    laneError * laneGain - vehicle.lateralSpeed * lateralDamping - vehicle.yawOffset * yawDamping,
+    -0.82,
+    0.82,
+  )
 
   const airbrakeThreshold = 10.4 + clean.intent * 2.2
   const wantsAirbrake = turnDegrees >= airbrakeThreshold && brake < 0.65

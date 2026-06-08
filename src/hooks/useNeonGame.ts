@@ -62,6 +62,12 @@ export const applyTouchCommand = (
   touch.steer = (touch.left ? STEER_LEFT : 0) + (touch.right ? STEER_RIGHT : 0)
 }
 
+export const applyTouchSteer = (touch: TouchState, steer: number): void => {
+  touch.left = false
+  touch.right = false
+  touch.steer = Math.max(-1, Math.min(1, steer))
+}
+
 const keyInput = (keys: Set<string>): KeyState => ({
   throttle:
     (hasAny(keys, ['KeyW', 'ArrowUp', 'w', 'z']) ? 1 : 0) +
@@ -93,6 +99,13 @@ export const useNeonGame = () => {
   const lastPublishedPhaseRef = useRef(view.race.phase)
 
   useEffect(() => {
+    const clearInputState = () => {
+      pressedKeysRef.current.clear()
+      touchRef.current = createTouchState()
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') clearInputState()
+    }
     const onKeyDown = (event: KeyboardEvent) => {
       pressedKeysRef.current.add(event.code)
       pressedKeysRef.current.add(normalizeKey(event))
@@ -109,9 +122,15 @@ export const useNeonGame = () => {
     }
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('blur', clearInputState)
+    window.addEventListener('pagehide', clearInputState)
+    document.addEventListener('visibilitychange', onVisibilityChange)
     return () => {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('blur', clearInputState)
+      window.removeEventListener('pagehide', clearInputState)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
     }
   }, [])
 
@@ -161,6 +180,10 @@ export const useNeonGame = () => {
     applyTouchCommand(touchRef.current, command, active)
   }, [])
 
+  const setTouchSteer = useCallback((steer: number) => {
+    applyTouchSteer(touchRef.current, steer)
+  }, [])
+
   const reset = useCallback(() => {
     touchRef.current.reset = true
   }, [])
@@ -183,6 +206,7 @@ export const useNeonGame = () => {
     start,
     menu,
     setTouch,
+    setTouchSteer,
     reset,
     version: view.version,
   }

@@ -9,6 +9,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "tsc -b && vite build",
+    "build:client": "vite build",
     "e2e": "playwright test",
     "lint": "eslint .",
     "preview": "vite preview"

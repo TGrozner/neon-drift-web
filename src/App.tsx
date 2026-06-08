@@ -12,7 +12,7 @@ import { useNeonGame } from './hooks/useNeonGame'
 import './App.css'
 
 function App() {
-  const { race, raceRef, start, menu, setTouch, reset, version } = useNeonGame()
+  const { race, raceRef, start, menu, setTouch, setTouchSteer, reset, version } = useNeonGame()
   const [selectedProfile, setSelectedProfile] = useState<ShipProfileId>('balanced')
   const [selectedTrack, setSelectedTrack] = useState<TrackId>('tutorial-circuit')
   const audio = useNeonAudio(race)
@@ -37,7 +37,12 @@ function App() {
         onMenuCue={audio.playMenuCue}
         onStart={() => start(selectedProfile, selectedTrack)}
       />
-      <TouchControls onTouch={setTouch} onReset={reset} />
+      <TouchControls
+        autoThrottle={race.phase !== 'menu' && race.phase !== 'results'}
+        onSteer={setTouchSteer}
+        onTouch={setTouch}
+        onReset={reset}
+      />
     </main>
   )
 }
