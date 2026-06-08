@@ -44,8 +44,19 @@ export const fromAngle = (angle: number): Vec2 => ({
 
 export const angleOf = (v: Vec2): number => Math.atan2(v.y, v.x)
 
-export const clamp = (value: number, min: number, max: number): number =>
-  Math.min(max, Math.max(min, value))
+export const finiteOr = (value: number, fallback = 0): number =>
+  Number.isFinite(value) ? value : fallback
+
+export const clamp = (value: number, min: number, max: number): number => {
+  const safeMin = Number.isNaN(min) ? 0 : min
+  const safeMax = Number.isNaN(max) ? safeMin : max
+  const lower = Math.min(safeMin, safeMax)
+  const upper = Math.max(safeMin, safeMax)
+  if (Number.isNaN(value)) return lower
+  if (value === Number.POSITIVE_INFINITY) return upper
+  if (value === Number.NEGATIVE_INFINITY) return lower
+  return Math.min(upper, Math.max(lower, value))
+}
 
 export const saturate = (value: number): number => clamp(value, 0, 1)
 
@@ -59,14 +70,16 @@ export const approach = (value: number, target: number, rate: number, dt: number
   lerp(value, target, saturate(rate * dt))
 
 export const wrapDistance = (distance: number, totalLength: number): number => {
-  if (totalLength <= 0) return distance
-  const wrapped = distance % totalLength
+  if (!Number.isFinite(totalLength) || totalLength <= 0) return finiteOr(distance)
+  const wrapped = finiteOr(distance) % totalLength
   return wrapped < 0 ? wrapped + totalLength : wrapped
 }
 
 export const signedWrappedDelta = (from: number, to: number, totalLength: number): number => {
-  if (totalLength <= 0) return to - from
-  let delta = to - from
+  const safeFrom = finiteOr(from)
+  const safeTo = finiteOr(to)
+  if (!Number.isFinite(totalLength) || totalLength <= 0) return safeTo - safeFrom
+  let delta = safeTo - safeFrom
   if (delta > totalLength * 0.5) delta -= totalLength
   if (delta < -totalLength * 0.5) delta += totalLength
   return delta
@@ -77,7 +90,7 @@ export const distanceAlongForward = (
   to: number,
   totalLength: number,
 ): number => {
-  if (totalLength <= 0) return to - from
+  if (!Number.isFinite(totalLength) || totalLength <= 0) return finiteOr(to) - finiteOr(from)
   let ahead = wrapDistance(to, totalLength) - wrapDistance(from, totalLength)
   if (ahead < 0) ahead += totalLength
   return ahead
@@ -132,4 +145,3 @@ export const lerp3 = (a: Vec3, b: Vec3, t: number): Vec3 => ({
 })
 
 export const distance3 = (a: Vec3, b: Vec3): number => length3(sub3(a, b))
-

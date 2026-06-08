@@ -7,7 +7,7 @@ This build does not run Source 2 or s&box APIs in the browser. It recreates the 
 ## Current Scope
 
 - Tutorial Circuit plus the nine current s&box source track layouts: Neon Oval, Friend Circuit, Skyline Sprint, Banked Speedway, Gravity Loop, Helix Loop, Inversion Ribbon, Corkscrew Relay, and Looping Inferno.
-- Track-space banking, gates, pads, start grid, rails, skyline dressing, and slipstream wake rendering.
+- Track-space banking, gates, pads, start grid, rails, and slipstream wake rendering.
 - Three ship profiles: Balanced, Swift, Heavy.
 - Solo pack race with five deterministic bots.
 - Warmup, countdown, launch boost, racing, finish/results phase.

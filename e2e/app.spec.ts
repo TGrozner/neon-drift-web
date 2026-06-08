@@ -440,7 +440,6 @@ test('starts a playable 3D race and renders canvas pixels', async ({ page }) => 
         sourceTrackStartLineModelCount?: number
         sourceTrackSlabModelCount?: number
         sourceTrackRailModelCount?: number
-        sourceTrackSkylineTowerModelCount?: number
         sourceTrackKitLoaded?: boolean
       }
     }).__NEON_RENDER_STATS
@@ -452,7 +451,6 @@ test('starts a playable 3D race and renders canvas pixels', async ({ page }) => 
       startLine: stats?.sourceTrackStartLineModelCount ?? 0,
       slabs: stats?.sourceTrackSlabModelCount ?? 0,
       rails: stats?.sourceTrackRailModelCount ?? 0,
-      towers: stats?.sourceTrackSkylineTowerModelCount ?? 0,
     }
   }), { timeout: 15_000 }).toEqual({
     loaded: true,
@@ -462,7 +460,6 @@ test('starts a playable 3D race and renders canvas pixels', async ({ page }) => 
     startLine: 1,
     slabs: 384,
     rails: 768,
-    towers: 0,
   })
 })
 
@@ -481,6 +478,8 @@ test('starts a playable source-authored inversion track', async ({ page }) => {
     const stats = (window as Window & typeof globalThis & {
       __NEON_RENDER_STATS?: {
         playerSlipstreamPulse?: number
+        playerSlipstreamVisualBandCount?: number
+        playerSlipstreamVisualStrength?: number
         renderedSlipstreamSegmentCount?: number
         renderedSlipstreamGroundBandCount?: number
         slipstreamSegmentCount?: number
@@ -488,6 +487,8 @@ test('starts a playable source-authored inversion track', async ({ page }) => {
     }).__NEON_RENDER_STATS
     return (
       (stats?.playerSlipstreamPulse ?? 0) > 0 &&
+      (stats?.playerSlipstreamVisualBandCount ?? 0) > 0 &&
+      (stats?.playerSlipstreamVisualStrength ?? 0) > 0 &&
       (stats?.renderedSlipstreamSegmentCount ?? 0) > 0 &&
       (stats?.renderedSlipstreamGroundBandCount ?? 0) > 0 &&
       (stats?.slipstreamSegmentCount ?? 0) > (stats?.renderedSlipstreamSegmentCount ?? 0)
@@ -495,8 +496,8 @@ test('starts a playable source-authored inversion track', async ({ page }) => {
   }), { timeout: 4_000 }).toBe(true)
   await expect.poll(async () => {
     const stats = await canvasDraftCueStats(page)
-    return stats.magentaPixelRatio
-  }, { timeout: 4_000 }).toBeGreaterThan(0.01)
+    return stats.magentaPixelRatio > 0.0005 && stats.maxMagentaScore > 28
+  }, { timeout: 4_000 }).toBe(true)
   await expect.poll(() => canvasHasNonBlankPixels(page)).toBe(true)
   await expect.poll(() => page.evaluate(() => {
     const stats = (window as Window & typeof globalThis & {
@@ -504,20 +505,17 @@ test('starts a playable source-authored inversion track', async ({ page }) => {
         sourceTrackKitLoaded?: boolean
         sourceTrackSlabModelCount?: number
         sourceTrackRailModelCount?: number
-        sourceTrackSkylineTowerModelCount?: number
       }
     }).__NEON_RENDER_STATS
     return {
       loaded: stats?.sourceTrackKitLoaded ?? false,
       slabs: stats?.sourceTrackSlabModelCount ?? 0,
       rails: stats?.sourceTrackRailModelCount ?? 0,
-      towers: stats?.sourceTrackSkylineTowerModelCount ?? 0,
     }
   }), { timeout: 15_000 }).toEqual({
     loaded: true,
     slabs: 640,
     rails: 1280,
-    towers: 34,
   })
   await releaseThrottle(page)
 })

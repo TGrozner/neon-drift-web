@@ -12,7 +12,8 @@ type Props = {
 
 const MOBILE_CONTROLS_QUERY = '(max-width: 820px)'
 
-const clamp = (value: number): number => Math.max(-1, Math.min(1, value))
+const clamp = (value: number): number =>
+  Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0
 
 const bindAction = (
   command: ActionCommand,
@@ -53,7 +54,7 @@ export function TouchControls({ autoThrottle, onSteer, onTouch, onReset }: Props
   })
 
   useEffect(() => {
-    if (!('matchMedia' in window)) {
+    if (typeof window.matchMedia !== 'function') {
       onTouch('throttle', false)
       return undefined
     }
@@ -75,7 +76,8 @@ export function TouchControls({ autoThrottle, onSteer, onTouch, onReset }: Props
 
   const setSteeringFromPointer = (event: PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
-    const centered = (event.clientX - rect.left - rect.width * 0.5) / Math.max(1, rect.width * 0.5)
+    const clientX = Number.isFinite(event.clientX) ? event.clientX : rect.left + rect.width * 0.5
+    const centered = (clientX - rect.left - rect.width * 0.5) / Math.max(1, rect.width * 0.5)
     const nextSteer = Math.abs(centered) < 0.08 ? 0 : clamp(-centered)
     setSteer(nextSteer)
     onSteer(nextSteer)

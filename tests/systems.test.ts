@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createElement } from 'react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { createBotBrain, getBotInput } from '../shared/bot'
 import { FIXED_DT, RACE, SHIP_PROFILES, SLIPSTREAM } from '../shared/constants'
-import { cross3, dot3 } from '../shared/math'
+import { clamp, cross3, distanceAlongForward, dot3, signedWrappedDelta, wrapDistance } from '../shared/math'
 import { EMPTY_INPUT, createVehicle } from '../shared/physics'
 import { isInsidePad, triggerTrackPads } from '../shared/pads'
 import { getPlayer, startRace, updateRace, updateRivals, updateStandings } from '../shared/race'
@@ -10,9 +12,11 @@ import {
   createSlipstreamState,
   publishSlipstream,
   sampleSlipstream,
+  slipstreamSegmentInfluence,
 } from '../shared/slipstream'
 import { NEON_OVAL, TRACKS, trackToWorld } from '../shared/track'
 import { NeonAudioEngine } from '../src/audio/neonAudio'
+import { Tutorial } from '../src/components/Tutorial'
 import { standingsForHud } from '../src/components/hudRows'
 import { applyTouchCommand, applyTouchSteer, createTouchState } from '../src/hooks/useNeonGame'
 import { createRenderBasis } from '../src/render/renderer'
@@ -23,7 +27,19 @@ const angleBetweenDegrees = (
 ): number => Math.acos(Math.max(-1, Math.min(1, dot3(a, b)))) * 180 / Math.PI
 
 afterEach(() => {
+  cleanup()
   vi.unstubAllGlobals()
+})
+
+describe('numeric guardrails', () => {
+  it('keeps non-finite values from leaking into core distance helpers', () => {
+    expect(clamp(Number.NaN, -1, 1)).toBe(-1)
+    expect(clamp(Number.POSITIVE_INFINITY, -1, 1)).toBe(1)
+    expect(wrapDistance(Number.NaN, 100)).toBe(0)
+    expect(wrapDistance(112, Number.NaN)).toBe(112)
+    expect(signedWrappedDelta(Number.NaN, 10, 100)).toBe(10)
+    expect(distanceAlongForward(10, Number.NaN, 100)).toBe(90)
+  })
 })
 
 describe('track and pads', () => {
@@ -48,15 +64,7 @@ describe('track and pads', () => {
       expect(track.gates).toHaveLength(8)
       expect(track.startGrid).toHaveLength(8)
       expect(track.visualSegments).toHaveLength((sourceSpec?.nodes.length ?? 0) * (sourceSpec?.subdivisions ?? 0))
-      expect(track.skylineTowers).toHaveLength(track.id === 'tutorial-circuit' || track.id === 'neon-oval' ? 0 : 34)
-      for (const tower of track.skylineTowers) {
-        expect(Number.isFinite(tower.position.x)).toBe(true)
-        expect(Number.isFinite(tower.position.y)).toBe(true)
-        expect(Number.isFinite(tower.position.z)).toBe(true)
-        expect(tower.scale.x).toBeGreaterThan(0)
-        expect(tower.scale.y).toBeGreaterThan(0)
-        expect(tower.scale.z).toBeGreaterThan(0)
-      }
+      expect('skylineTowers' in track).toBe(false)
       for (let i = 0; i < 12; i += 1) {
         const profile = track.sample((track.totalLength * i) / 12)
         expect(Number.isFinite(profile.center.x)).toBe(true)
@@ -192,6 +200,39 @@ describe('slipstream', () => {
     expect(inside.strength).toBeLessThanOrEqual(SLIPSTREAM.stackCap)
     expect(outside.strength).toBe(0)
     expect(old.strength).toBe(0)
+  })
+
+  it('uses the same segment influence for physics sampling and visual draft bands', () => {
+    const state = createSlipstreamState()
+    expect(publishSlipstream(
+      state,
+      NEON_OVAL,
+      'owner',
+      80,
+      0,
+      SHIP_PROFILES.balanced.maxSpeed,
+      SHIP_PROFILES.balanced.maxSpeed,
+      1,
+    )).toBe(true)
+    const segment = state.segments[0]
+    const sample = sampleSlipstream(state, NEON_OVAL, 'player', segment.centerDistance, 0, 1.2)
+    const influence = slipstreamSegmentInfluence(segment, NEON_OVAL, 'player', segment.centerDistance, 0, 1.2)
+    const outside = slipstreamSegmentInfluence(
+      segment,
+      NEON_OVAL,
+      'player',
+      segment.centerDistance,
+      segment.halfWidth + 0.01,
+      1.2,
+    )
+    const owner = slipstreamSegmentInfluence(segment, NEON_OVAL, 'owner', segment.centerDistance, 0, 1.2)
+
+    expect(influence.strength).toBeGreaterThan(0)
+    expect(sample.strength).toBeCloseTo(Math.min(influence.strength, SLIPSTREAM.stackCap))
+    expect(influence.alongRatio).toBe(1)
+    expect(influence.lateralRatio).toBe(1)
+    expect(outside.strength).toBe(0)
+    expect(owner.strength).toBe(0)
   })
 
   it('applies a published trail through the race update loop', () => {
@@ -596,6 +637,42 @@ describe('browser integration helpers', () => {
     expect(touch.steer).toBe(0)
     expect(touch.left).toBe(false)
     expect(touch.right).toBe(false)
+  })
+
+  it('neutralizes invalid analog touch steering input', () => {
+    const touch = createTouchState()
+
+    applyTouchSteer(touch, Number.NaN)
+
+    expect(touch.steer).toBe(0)
+    expect(touch.left).toBe(false)
+    expect(touch.right).toBe(false)
+  })
+
+  it('renders tutorial UI when tutorial storage is unavailable', () => {
+    const originalStorage = Object.getOwnPropertyDescriptor(window, 'localStorage')
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: () => {
+          throw new Error('storage unavailable')
+        },
+        setItem: () => {
+          throw new Error('storage unavailable')
+        },
+        removeItem: () => {
+          throw new Error('storage unavailable')
+        },
+      },
+    })
+
+    try {
+      const race = startRace('balanced', 'tutorial-circuit')
+      render(createElement(Tutorial, { activeTrackId: 'tutorial-circuit', race, raceVersion: 0 }))
+      expect(screen.getByTestId('tutorial')).toBeTruthy()
+    } finally {
+      if (originalStorage) Object.defineProperty(window, 'localStorage', originalStorage)
+    }
   })
 
   it('plays the finish cue once when results follow the finished phase', () => {

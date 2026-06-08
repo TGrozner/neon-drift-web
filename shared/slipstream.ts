@@ -28,11 +28,27 @@ export type SlipstreamSample = {
   stackCapped: boolean
 }
 
+export type SlipstreamSegmentInfluence = {
+  strength: number
+  lanePull: number
+  alongRatio: number
+  lateralRatio: number
+  ageRatio: number
+}
+
 export const createSlipstreamState = (): SlipstreamState => ({
   segments: [],
   lastEmitByOwner: {},
   lastPrunedAt: Number.NEGATIVE_INFINITY,
 })
+
+const noInfluence: SlipstreamSegmentInfluence = {
+  strength: 0,
+  lanePull: 0,
+  alongRatio: 0,
+  lateralRatio: 0,
+  ageRatio: 0,
+}
 
 export const pruneSlipstream = (state: SlipstreamState, now: number): void => {
   if (now <= state.lastPrunedAt) return
@@ -93,26 +109,14 @@ export const sampleSlipstream = (
   let stackCapped = false
 
   for (const segment of state.segments) {
-    if (segment.trackId !== track.id) continue
-    if (segment.ownerId === vehicleId) continue
-    const age = now - segment.createdAt
-    if (age < 0 || age > segment.lifetime) continue
-
-    const along = signedWrappedDelta(segment.centerDistance, distance, track.totalLength)
-    if (Math.abs(along) > segment.halfLength) continue
-    const lateral = lane - segment.lane
-    if (Math.abs(lateral) > segment.halfWidth) continue
-
-    const alongRatio = 1 - Math.abs(along) / Math.max(1, segment.halfLength)
-    const lateralRatio = 1 - Math.abs(lateral) / Math.max(1, segment.halfWidth)
-    const ageRatio = 1 - age / Math.max(0.01, segment.lifetime)
-    const strength = segment.intensity * alongRatio * lateralRatio * ageRatio
+    const influence = slipstreamSegmentInfluence(segment, track, vehicleId, distance, lane, now)
+    const { strength } = influence
     if (strength <= 0) continue
 
     combined += strength
     if (strength > strongest) {
       strongest = strength
-      lanePull = Math.max(-1, Math.min(1, lateral / Math.max(1, segment.halfWidth)))
+      lanePull = influence.lanePull
     }
   }
 
@@ -127,5 +131,38 @@ export const sampleSlipstream = (
     lanePull,
     activeSegments: state.segments.length,
     stackCapped,
+  }
+}
+
+export const slipstreamSegmentInfluence = (
+  segment: SlipstreamSegment,
+  track: RaceTrack,
+  vehicleId: string,
+  distance: number,
+  lane: number,
+  now: number,
+): SlipstreamSegmentInfluence => {
+  if (segment.trackId !== track.id) return noInfluence
+  if (segment.ownerId === vehicleId) return noInfluence
+  const age = now - segment.createdAt
+  if (age < 0 || age > segment.lifetime) return noInfluence
+
+  const along = signedWrappedDelta(segment.centerDistance, distance, track.totalLength)
+  if (Math.abs(along) > segment.halfLength) return noInfluence
+  const lateral = lane - segment.lane
+  if (Math.abs(lateral) > segment.halfWidth) return noInfluence
+
+  const alongRatio = 1 - Math.abs(along) / Math.max(1, segment.halfLength)
+  const lateralRatio = 1 - Math.abs(lateral) / Math.max(1, segment.halfWidth)
+  const ageRatio = 1 - age / Math.max(0.01, segment.lifetime)
+  const strength = segment.intensity * alongRatio * lateralRatio * ageRatio
+  if (strength <= 0) return noInfluence
+
+  return {
+    strength,
+    lanePull: Math.max(-1, Math.min(1, lateral / Math.max(1, segment.halfWidth))),
+    alongRatio,
+    lateralRatio,
+    ageRatio,
   }
 }

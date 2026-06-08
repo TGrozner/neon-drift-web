@@ -26,7 +26,7 @@ Current delivered scope is the browser-native 3D cut:
 - Tutorial Circuit plus all nine current s&box source track layouts: Neon Oval, Friend Circuit, Skyline Sprint, Banked Speedway, Gravity Loop, Helix Loop, Inversion Ribbon, Corkscrew Relay, and Looping Inferno.
 - Three ship profiles: Balanced, Swift, Heavy.
 - Solo race with deterministic pack bots.
-- Three.js renderer with prototype GLB ships, track kit, gates, pads, rails, start line, skyline dressing, slipstream cues, and WebGL pixel checks.
+- Three.js renderer with prototype GLB ships, track kit, gates, pads, rails, start line, slipstream cues, and WebGL pixel checks.
 - Shared pure simulation and tests.
 
 ## Source Systems Audited
@@ -77,7 +77,7 @@ Current delivered scope is the browser-native 3D cut:
 - Standings, speed/power HUD, airbrake charge, crash-out and slipstream feedback.
 - Client-side tutorial progression.
 - Source track specs for the nine s&box layouts plus a browser tutorial circuit.
-- Prototype source-style ship and track-kit GLBs, including skyline tower dressing on source tracks.
+- Prototype source-style ship and track-kit GLBs for ships, gates, pads, rails, slabs, and start lines.
 
 ## Systems Ignored Voluntarily
 
@@ -111,7 +111,7 @@ Tuning values were normalized from s&box scale using a `1/100` speed factor, pre
 ## Tests Added
 
 - `tests/physics.test.ts`: airbrake grip, turn authority, exit boost timing/cooldown, boost thresholds/lockout, profiles, crash-out.
-- `tests/systems.test.ts`: source tracks/gates/grid/pads/skyline dressing, pad swept cooldowns, slipstream emission/sampling/cap/decay, bot behavior, race flow.
+- `tests/systems.test.ts`: source tracks/gates/grid/pads, pad swept cooldowns, slipstream emission/sampling/cap/decay, bot behavior, race flow.
 - `e2e/app.spec.ts`: app launch, menu, race start, keyboard driving, HUD, WebGL nonblank pixel check.
 
 ## Playtest Checklist

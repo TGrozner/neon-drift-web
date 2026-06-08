@@ -25,8 +25,25 @@ const storageKey = 'neon_drift_web.tutorial.v1.complete'
 const mobileControlsQuery = '(max-width: 820px)'
 const mobileControlsMatch = (): boolean =>
   typeof window !== 'undefined' &&
-  'matchMedia' in window &&
+  typeof window.matchMedia === 'function' &&
   window.matchMedia(mobileControlsQuery).matches
+
+const tutorialComplete = (): boolean => {
+  try {
+    return window.localStorage.getItem(storageKey) === 'true'
+  } catch {
+    return false
+  }
+}
+
+const setTutorialComplete = (complete: boolean): void => {
+  try {
+    if (complete) window.localStorage.setItem(storageKey, 'true')
+    else window.localStorage.removeItem(storageKey)
+  } catch {
+    // Storage can be unavailable in privacy/sandboxed contexts.
+  }
+}
 
 const steps: TutorialStep[] = [
   {
@@ -107,7 +124,7 @@ type Props = {
 
 export function Tutorial({ activeTrackId, race, raceVersion }: Props) {
   const trainingTrackActive = activeTrackId === 'tutorial-circuit'
-  const initiallyComplete = useMemo(() => !trainingTrackActive && localStorage.getItem(storageKey) === 'true', [trainingTrackActive])
+  const initiallyComplete = useMemo(() => !trainingTrackActive && tutorialComplete(), [trainingTrackActive])
   const [index, setIndex] = useState(initiallyComplete ? steps.length : 0)
   const [acknowledged, setAcknowledged] = useState(false)
   const [mobileControlsActive, setMobileControlsActive] = useState(mobileControlsMatch)
@@ -122,7 +139,7 @@ export function Tutorial({ activeTrackId, race, raceVersion }: Props) {
   const awaitingAcknowledgement = visible && current?.id !== 'menu' && !acknowledged
 
   useEffect(() => {
-    if (!('matchMedia' in window)) return undefined
+    if (typeof window.matchMedia !== 'function') return undefined
     const media = window.matchMedia(mobileControlsQuery)
     const update = () => setMobileControlsActive(media.matches)
     update()
@@ -133,11 +150,11 @@ export function Tutorial({ activeTrackId, race, raceVersion }: Props) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.code === 'F1') {
-        localStorage.setItem(storageKey, 'true')
+        setTutorialComplete(true)
         setIndex(steps.length)
       }
       if (event.code === 'F2') {
-        localStorage.removeItem(storageKey)
+        setTutorialComplete(false)
         setIndex(race.phase === 'menu' ? 0 : 1)
         setAcknowledged(false)
       }
@@ -154,7 +171,7 @@ export function Tutorial({ activeTrackId, race, raceVersion }: Props) {
         setAcknowledged(false)
         return
       }
-      if (!trainingTrackActive && localStorage.getItem(storageKey) === 'true') {
+      if (!trainingTrackActive && tutorialComplete()) {
         setIndex(steps.length)
         setAcknowledged(false)
       }
@@ -171,7 +188,7 @@ export function Tutorial({ activeTrackId, race, raceVersion }: Props) {
       setIndex((value) => {
         if (steps[value]?.id !== stepId) return value
         const next = value + 1
-        if (next >= steps.length) localStorage.setItem(storageKey, 'true')
+        if (next >= steps.length) setTutorialComplete(true)
         return next
       })
       setAcknowledged(false)

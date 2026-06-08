@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SHIP_PROFILES } from '../shared/constants'
+import { SHIP_PROFILES, SLIPSTREAM } from '../shared/constants'
 import {
   EMPTY_INPUT,
   applyPowerDamage,
@@ -40,7 +40,8 @@ describe('ship physics', () => {
       })
     }
 
-    expect(vehicle.forwardSpeed).toBeGreaterThan(60)
+    expect(vehicle.forwardSpeed).toBeGreaterThan(68)
+    expect(vehicle.forwardSpeed).toBeLessThan(SHIP_PROFILES.balanced.maxSpeed)
   })
 
   it('keeps committed yaw after steering is released', () => {
@@ -87,6 +88,32 @@ describe('ship physics', () => {
     expect(Math.hypot(vehicle.forwardSpeed, vehicle.lateralSpeed)).toBeLessThanOrEqual(
       SHIP_PROFILES.balanced.maxSpeed * 1.01,
     )
+  })
+
+  it('treats invalid direct physics input as neutral instead of steering or braking', () => {
+    const invalid = createVehicle('invalid', 'Invalid', 'balanced', true, 20, 0)
+    const neutral = createVehicle('neutral', 'Neutral', 'balanced', true, 20, 0)
+    invalid.forwardSpeed = 40
+    neutral.forwardSpeed = 40
+
+    stepVehicle(invalid, {
+      track: NEON_OVAL,
+      input: { ...EMPTY_INPUT, throttle: Number.NaN, steer: Number.NaN },
+      dt: 1 / 60,
+      slipstream: noSlipstream,
+      nearbyVehicles: 0,
+    })
+    stepVehicle(neutral, {
+      track: NEON_OVAL,
+      input: EMPTY_INPUT,
+      dt: 1 / 60,
+      slipstream: noSlipstream,
+      nearbyVehicles: 0,
+    })
+
+    expect(invalid.forwardSpeed).toBeCloseTo(neutral.forwardSpeed)
+    expect(invalid.lane).toBeCloseTo(neutral.lane)
+    expect(invalid.yawOffset).toBeCloseTo(neutral.yawOffset)
   })
 
   it('airbrake keeps more lateral slip and increases turn authority', () => {
@@ -284,14 +311,16 @@ describe('ship physics', () => {
     expect(Math.abs(banked.lateralSpeed)).toBeLessThan(Math.abs(straight.lateralSpeed))
   })
 
-  it('fades slipstream acceleration near normal max speed', () => {
+  it('lets slipstream pull past normal max speed but fades below boost speed', () => {
     const lowSpeed = createVehicle('low', 'Low', 'balanced', true, 20, 0)
     const nearMax = createVehicle('near-max', 'Near Max', 'balanced', true, 20, 0)
+    const aboveDraft = createVehicle('above-draft', 'Above Draft', 'balanced', true, 20, 0)
     lowSpeed.forwardSpeed = SHIP_PROFILES.balanced.maxSpeed * 0.6
     nearMax.forwardSpeed = SHIP_PROFILES.balanced.maxSpeed * 1.01
+    aboveDraft.forwardSpeed = SHIP_PROFILES.balanced.maxSpeed + SLIPSTREAM.speedBonus * 1.02
     const slipstream = {
       strength: 1,
-      accelerationBonus: 46,
+      accelerationBonus: SLIPSTREAM.acceleration,
       lanePull: 0,
       activeSegments: 1,
       stackCapped: false,
@@ -311,9 +340,19 @@ describe('ship physics', () => {
       slipstream,
       nearbyVehicles: 0,
     })
+    stepVehicle(aboveDraft, {
+      track: NEON_OVAL,
+      input: { ...EMPTY_INPUT, throttle: 0 },
+      dt: 1 / 60,
+      slipstream,
+      nearbyVehicles: 0,
+    })
 
     expect(lowSpeed.slipstreamPulse).toBeGreaterThan(0)
-    expect(nearMax.slipstreamPulse).toBe(0)
+    expect(nearMax.slipstreamPulse).toBeGreaterThan(0)
+    expect(nearMax.forwardSpeed).toBeGreaterThan(SHIP_PROFILES.balanced.maxSpeed)
+    expect(nearMax.forwardSpeed).toBeLessThan(SHIP_PROFILES.balanced.boostSpeed)
+    expect(aboveDraft.slipstreamPulse).toBe(0)
   })
 
   it('crash-out restores checkpoint, power, grace, and penalty', () => {

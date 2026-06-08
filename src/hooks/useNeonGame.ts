@@ -8,6 +8,7 @@ import {
   updateRace,
   type RaceState,
 } from '../../shared/race'
+import { clamp, finiteOr } from '../../shared/math'
 import type { TrackId } from '../../shared/track'
 
 type KeyState = {
@@ -48,6 +49,7 @@ const hasAny = (keys: Set<string>, values: string[]): boolean =>
 const STEER_LEFT = 1
 const STEER_RIGHT = -1
 const REACT_PUBLISH_INTERVAL_MS = 50
+const clampInput = (value: number): number => clamp(value, -1, 1)
 
 export const applyTouchCommand = (
   touch: TouchState,
@@ -65,7 +67,7 @@ export const applyTouchCommand = (
 export const applyTouchSteer = (touch: TouchState, steer: number): void => {
   touch.left = false
   touch.right = false
-  touch.steer = Math.max(-1, Math.min(1, steer))
+  touch.steer = clampInput(finiteOr(steer))
 }
 
 const keyInput = (keys: Set<string>): KeyState => ({
@@ -81,8 +83,8 @@ const keyInput = (keys: Set<string>): KeyState => ({
 })
 
 const mergeInput = (keyboard: KeyState, touch: KeyState): VehicleInput => ({
-  throttle: Math.max(-1, Math.min(1, keyboard.throttle + touch.throttle)),
-  steer: Math.max(-1, Math.min(1, keyboard.steer + touch.steer)),
+  throttle: clampInput(keyboard.throttle + touch.throttle),
+  steer: clampInput(keyboard.steer + touch.steer),
   boost: keyboard.boost || touch.boost,
   airbrake: keyboard.airbrake || touch.airbrake,
   reset: keyboard.reset || touch.reset,
@@ -139,7 +141,8 @@ export const useNeonGame = () => {
     const tick = (time: number) => {
       const last = lastTimeRef.current ?? time
       lastTimeRef.current = time
-      const frameDt = Math.min(MAX_ACCUMULATED_TIME, (time - last) / 1000)
+      const elapsedSeconds = Math.max(0, finiteOr((time - last) / 1000))
+      const frameDt = Math.min(MAX_ACCUMULATED_TIME, elapsedSeconds)
       accumulatorRef.current += frameDt
       let stepped = false
       while (accumulatorRef.current >= FIXED_DT) {

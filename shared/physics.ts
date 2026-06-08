@@ -18,6 +18,7 @@ import {
   distanceAlongForward,
   dot3,
   expDecay,
+  finiteOr,
   normalize3,
   saturate,
   scale3,
@@ -437,10 +438,11 @@ export type StepVehicleContext = {
 }
 
 export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void => {
-  const { track, input, dt, slipstream, nearbyVehicles } = context
+  const { track, input, slipstream, nearbyVehicles } = context
+  const dt = Math.max(0, finiteOr(context.dt))
   const profile = SHIP_PROFILES[vehicle.profileId]
-  const throttle = clamp(input.throttle, -1, 1)
-  const steer = clamp(input.steer, -1, 1)
+  const throttle = clamp(finiteOr(input.throttle), -1, 1)
+  const steer = clamp(finiteOr(input.steer), -1, 1)
 
   vehicle.previousDistance = vehicle.distance
   vehicle.previousLane = vehicle.lane
@@ -581,13 +583,20 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
   if (vehicle.speedPadPulse > 0) {
     velocity = add3(velocity, scale3(heading, PADS.speedPadSustainAcceleration * vehicle.speedPadPulse * dt))
   }
+  let slipstreamSpeedBonus = 0
   if (slipstream.strength > 0) {
-    const maxRatio = vehicle.forwardSpeed / Math.max(1, profile.maxSpeed)
+    const slipstreamStrength = saturate(slipstream.strength)
+    slipstreamSpeedBonus = SLIPSTREAM.speedBonus * slipstreamStrength
+    const slipstreamTargetSpeed = profile.maxSpeed + slipstreamSpeedBonus
+    const maxRatio = vehicle.forwardSpeed / Math.max(1, slipstreamTargetSpeed)
     const fadeWindow = Math.max(0.01, 1 - SLIPSTREAM.nearMaxFadeStart)
-    const belowMaxRatio = saturate((1 - maxRatio) / fadeWindow)
-    const effectiveStrength = slipstream.strength * belowMaxRatio
+    const belowTargetRatio = saturate((1 - maxRatio) / fadeWindow)
+    const effectiveStrength = slipstream.strength * belowTargetRatio
     if (effectiveStrength > 0) {
-      const forwardImpulse = Math.min(slipstream.accelerationBonus * belowMaxRatio * dt, Math.max(0, profile.maxSpeed - vehicle.forwardSpeed))
+      const forwardImpulse = Math.min(
+        slipstream.accelerationBonus * belowTargetRatio * dt,
+        Math.max(0, slipstreamTargetSpeed - vehicle.forwardSpeed),
+      )
       velocity = add3(velocity, scale3(heading, forwardImpulse))
       velocity = add3(velocity, scale3(profileNow.right, -slipstream.lanePull * SLIPSTREAM.lanePull * effectiveStrength * dt))
       vehicle.slipstreamPulse = Math.max(vehicle.slipstreamPulse, slipstream.strength)
@@ -641,6 +650,7 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
   const targetMax =
     profile.maxSpeed +
     (profile.boostSpeed - profile.maxSpeed) * saturate(vehicle.boostIntensity) +
+    slipstreamSpeedBonus +
     profile.airbrakeExitSpeedBonus * vehicle.airbrakeExitPulse +
     PADS.speedPadSpeedBonus * vehicle.speedPadPulse +
     CRASH_OUT.respawnBoostSpeedBonus * (vehicle.crashOutLaunchRemaining / CRASH_OUT.respawnBoostSeconds)

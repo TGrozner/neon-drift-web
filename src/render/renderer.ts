@@ -7,6 +7,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { SHIP_PROFILES } from '../../shared/constants'
 import { add3, clamp, cross3, dot3, normalize3, scale3, type Vec3 } from '../../shared/math'
 import type { RaceState } from '../../shared/race'
+import { slipstreamSegmentInfluence } from '../../shared/slipstream'
 import { trackToWorld, type RaceTrack } from '../../shared/track'
 import type { Vehicle } from '../../shared/physics'
 import { publicAsset } from '../publicAssets'
@@ -25,7 +26,6 @@ const shipModels = {
 const trackKitModels = {
   trackSlab: publicAsset('models/neon_drift/tracks/prototype_kit/track_slab.glb'),
   trackRail: publicAsset('models/neon_drift/tracks/prototype_kit/track_rail.glb'),
-  skylineTower: publicAsset('models/neon_drift/tracks/prototype_kit/skyline_tower.glb'),
   gatePost: publicAsset('models/neon_drift/tracks/prototype_kit/gate_post.glb'),
   gateBeam: publicAsset('models/neon_drift/tracks/prototype_kit/gate_beam.glb'),
   speedPad: publicAsset('models/neon_drift/tracks/prototype_kit/speed_pad.glb'),
@@ -38,6 +38,10 @@ type TrackKitModelId = keyof typeof trackKitModels
 const RENDERED_SLIPSTREAM_SEGMENTS = 96
 const ENABLE_SOURCE_SHIP_MODELS = true
 const ENABLE_SOURCE_TRACK_KIT_MODELS = true
+const CAMERA_FAR_PLANE = 1050
+const SCENE_FOG_DENSITY = 0.0042
+const HORIZON_GRID_SIZE = 420
+const HORIZON_GRID_DIVISIONS = 84
 
 const loadModel = (url: string): Promise<THREE.Group> => {
   const cached = modelCache.get(url)
@@ -125,6 +129,8 @@ type NeonRenderStats = {
   renderedSlipstreamSegmentCount: number
   renderedSlipstreamGroundBandCount: number
   playerSlipstreamPulse: number
+  playerSlipstreamVisualBandCount: number
+  playerSlipstreamVisualStrength: number
   gatePortalCount: number
   padMarkerCount: number
   trackEnvironmentInstances: number
@@ -134,7 +140,6 @@ type NeonRenderStats = {
   sourceTrackStartLineModelCount: number
   sourceTrackSlabModelCount: number
   sourceTrackRailModelCount: number
-  sourceTrackSkylineTowerModelCount: number
   sourceTrackKitLoaded: boolean
 }
 
@@ -144,7 +149,7 @@ export class NeonRenderer {
   private readonly composer: EffectComposer
   private readonly bloomPass: UnrealBloomPass
   private readonly scene = new THREE.Scene()
-  private readonly camera = new THREE.PerspectiveCamera(72, 1, 0.1, 700)
+  private readonly camera = new THREE.PerspectiveCamera(72, 1, 0.1, CAMERA_FAR_PLANE)
   private readonly shipGroups = new Map<string, THREE.Group>()
   private readonly shipMaterials = new Map<string, THREE.MeshStandardMaterial>()
   private readonly gateLines = new Map<number, THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>>()
@@ -156,6 +161,8 @@ export class NeonRenderer {
   private readonly slipstreamColor = new THREE.Color()
   private renderedSlipstreamSegmentCount = 0
   private renderedSlipstreamGroundBandCount = 0
+  private playerSlipstreamVisualBandCount = 0
+  private playerSlipstreamVisualStrength = 0
   private lastCameraUpdate = performance.now()
   private cameraTarget = new THREE.Vector3()
   private smoothedCameraForward = new THREE.Vector3()
@@ -169,14 +176,12 @@ export class NeonRenderer {
   private sourceTrackStartLineModelCount = 0
   private sourceTrackSlabModelCount = 0
   private sourceTrackRailModelCount = 0
-  private sourceTrackSkylineTowerModelCount = 0
   private expectedSourceTrackGateModelCount = 0
   private expectedSourceTrackGatePartModelCount = 0
   private expectedSourceTrackPadModelCount = 0
   private expectedSourceTrackStartLineModelCount = 0
   private expectedSourceTrackSlabModelCount = 0
   private expectedSourceTrackRailModelCount = 0
-  private expectedSourceTrackSkylineTowerModelCount = 0
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -196,13 +201,13 @@ export class NeonRenderer {
     this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.36, 0.42, 0.28)
     this.composer.addPass(this.bloomPass)
     this.composer.addPass(new OutputPass())
-    this.scene.fog = new THREE.FogExp2('#05060b', 0.006)
+    this.scene.fog = new THREE.FogExp2('#05060b', SCENE_FOG_DENSITY)
     this.slipstreamMesh = new THREE.InstancedMesh(
       new THREE.PlaneGeometry(1, 1),
       new THREE.MeshBasicMaterial({
         color: '#ffffff',
         transparent: true,
-        opacity: 0.34,
+        opacity: 0.26,
         blending: THREE.AdditiveBlending,
         depthTest: false,
         depthWrite: false,
@@ -219,11 +224,12 @@ export class NeonRenderer {
       new THREE.MeshBasicMaterial({
         color: '#ff2df4',
         transparent: true,
-        opacity: 0.14,
+        opacity: 0.11,
         depthTest: true,
         depthWrite: false,
         side: THREE.DoubleSide,
         toneMapped: false,
+        vertexColors: true,
       }),
       RENDERED_SLIPSTREAM_SEGMENTS,
     )
@@ -239,9 +245,9 @@ export class NeonRenderer {
     sun.position.set(18, 38, 24)
     this.scene.add(sun)
 
-    const grid = new THREE.GridHelper(260, 52, '#1a5367', '#101622')
+    const grid = new THREE.GridHelper(HORIZON_GRID_SIZE, HORIZON_GRID_DIVISIONS, '#1a5367', '#101622')
     grid.position.y = -0.08
-    grid.material.opacity = 0.16
+    grid.material.opacity = 0.12
     grid.material.transparent = true
     this.scene.add(grid)
     preloadSourceModels()
@@ -295,6 +301,8 @@ export class NeonRenderer {
       renderedSlipstreamSegmentCount: 0,
       renderedSlipstreamGroundBandCount: 0,
       playerSlipstreamPulse: 0,
+      playerSlipstreamVisualBandCount: 0,
+      playerSlipstreamVisualStrength: 0,
       gatePortalCount: 0,
       padMarkerCount: 0,
       trackEnvironmentInstances: 0,
@@ -304,7 +312,6 @@ export class NeonRenderer {
       sourceTrackStartLineModelCount: 0,
       sourceTrackSlabModelCount: 0,
       sourceTrackRailModelCount: 0,
-      sourceTrackSkylineTowerModelCount: 0,
       sourceTrackKitLoaded: false,
     }
     stats.calls = this.renderer.info.render.calls
@@ -316,6 +323,8 @@ export class NeonRenderer {
     stats.renderedSlipstreamSegmentCount = this.renderedSlipstreamSegmentCount
     stats.renderedSlipstreamGroundBandCount = this.renderedSlipstreamGroundBandCount
     stats.playerSlipstreamPulse = race.vehicles.find((vehicle) => vehicle.id === race.playerId)?.slipstreamPulse ?? 0
+    stats.playerSlipstreamVisualBandCount = this.playerSlipstreamVisualBandCount
+    stats.playerSlipstreamVisualStrength = this.playerSlipstreamVisualStrength
     stats.gatePortalCount = this.gatePortals.size
     stats.padMarkerCount = this.padMarkerCount
     stats.trackEnvironmentInstances = this.trackEnvironmentInstances
@@ -325,11 +334,9 @@ export class NeonRenderer {
     stats.sourceTrackStartLineModelCount = this.sourceTrackStartLineModelCount
     stats.sourceTrackSlabModelCount = this.sourceTrackSlabModelCount
     stats.sourceTrackRailModelCount = this.sourceTrackRailModelCount
-    stats.sourceTrackSkylineTowerModelCount = this.sourceTrackSkylineTowerModelCount
     stats.sourceTrackKitLoaded =
       this.sourceTrackSlabModelCount >= this.expectedSourceTrackSlabModelCount &&
       this.sourceTrackRailModelCount >= this.expectedSourceTrackRailModelCount &&
-      this.sourceTrackSkylineTowerModelCount >= this.expectedSourceTrackSkylineTowerModelCount &&
       this.sourceTrackGateModelCount >= this.expectedSourceTrackGateModelCount &&
       this.sourceTrackGatePartModelCount >= this.expectedSourceTrackGatePartModelCount &&
       this.sourceTrackPadModelCount >= this.expectedSourceTrackPadModelCount &&
@@ -353,10 +360,8 @@ export class NeonRenderer {
     this.sourceTrackStartLineModelCount = 0
     this.sourceTrackSlabModelCount = 0
     this.sourceTrackRailModelCount = 0
-    this.sourceTrackSkylineTowerModelCount = 0
     this.expectedSourceTrackSlabModelCount = 0
     this.expectedSourceTrackRailModelCount = 0
-    this.expectedSourceTrackSkylineTowerModelCount = 0
     this.expectedSourceTrackGateModelCount = ENABLE_SOURCE_TRACK_KIT_MODELS ? track.gates.length : 0
     this.expectedSourceTrackGatePartModelCount = ENABLE_SOURCE_TRACK_KIT_MODELS ? track.gates.length * 3 : 0
     this.expectedSourceTrackPadModelCount = ENABLE_SOURCE_TRACK_KIT_MODELS ? track.pads.length : 0
@@ -475,22 +480,8 @@ export class NeonRenderer {
   }
 
   private addTrackEnvironment(root: THREE.Group, track: RaceTrack): void {
-    const sourceTowers = track.skylineTowers
-    const towerCount = sourceTowers.length > 0 ? sourceTowers.length : Math.round(clamp(track.totalLength / 14, 36, 88))
     const beaconCount = Math.round(clamp(track.totalLength / 8, 52, 150))
     const dummy = new THREE.Object3D()
-    const sourceTowerInstances: TrackKitInstance[] = []
-    const towerMesh = new THREE.InstancedMesh(
-      new THREE.BoxGeometry(1, 1, 1),
-      new THREE.MeshStandardMaterial({
-        color: '#171b2e',
-        roughness: 0.68,
-        metalness: 0.34,
-        emissive: '#09172c',
-        emissiveIntensity: 0.48,
-      }),
-      towerCount,
-    )
     const beaconMesh = new THREE.InstancedMesh(
       new THREE.BoxGeometry(1, 1, 1),
       new THREE.MeshStandardMaterial({
@@ -502,33 +493,6 @@ export class NeonRenderer {
       }),
       beaconCount,
     )
-
-    if (sourceTowers.length > 0) {
-      for (let i = 0; i < sourceTowers.length; i += 1) {
-        const tower = sourceTowers[i]
-        dummy.position.copy(toThree(tower.position))
-        dummy.rotation.set(0, 0, 0)
-        dummy.scale.copy(toThree(tower.scale))
-        dummy.updateMatrix()
-        towerMesh.setMatrixAt(i, dummy.matrix)
-        sourceTowerInstances.push({ matrix: dummy.matrix.clone(), color: tower.color })
-      }
-    } else {
-      for (let i = 0; i < towerCount; i += 1) {
-        const distance = (track.totalLength * (i + 0.5)) / towerCount
-        const profile = track.sample(distance)
-        const side = i % 2 === 0 ? 1 : -1
-        const rhythm = ((i * 37) % 17) / 17
-        const height = 9 + rhythm * 24
-        const offset = profile.width * 0.5 + 24 + rhythm * 26
-        const position = add3(profile.center, scale3(profile.right, offset * side))
-        dummy.position.set(position.x, Math.max(-8, profile.center.y - 5) + height * 0.5, position.z)
-        dummy.rotation.set(0, Math.atan2(profile.tangent.x, profile.tangent.z) + rhythm * 0.38, 0)
-        dummy.scale.set(1.5 + rhythm * 2.8, height, 2.2 + (1 - rhythm) * 3.1)
-        dummy.updateMatrix()
-        towerMesh.setMatrixAt(i, dummy.matrix)
-      }
-    }
 
     for (let i = 0; i < beaconCount; i += 1) {
       const distance = (track.totalLength * i) / beaconCount
@@ -545,21 +509,9 @@ export class NeonRenderer {
       beaconMesh.setMatrixAt(i, dummy.matrix)
     }
 
-    towerMesh.instanceMatrix.needsUpdate = true
     beaconMesh.instanceMatrix.needsUpdate = true
-    root.add(towerMesh, beaconMesh)
-    this.trackEnvironmentInstances = towerCount + beaconCount
-    this.expectedSourceTrackSkylineTowerModelCount = ENABLE_SOURCE_TRACK_KIT_MODELS ? sourceTowerInstances.length : 0
-    this.addSourceTrackKitInstances(
-      root,
-      'skylineTower',
-      'source-track-skyline-tower-models',
-      sourceTowerInstances,
-      towerMesh,
-      () => {
-        this.sourceTrackSkylineTowerModelCount += sourceTowerInstances.length
-      },
-    )
+    root.add(beaconMesh)
+    this.trackEnvironmentInstances = beaconCount
   }
 
   private addGatePortal(root: THREE.Group, track: RaceTrack, gate: RaceTrack['gates'][number]): void {
@@ -819,9 +771,7 @@ export class NeonRenderer {
           ? '#6ce8ff'
           : modelId === 'trackSlab'
             ? '#274f66'
-            : modelId === 'skylineTower'
-              ? '#09172c'
-              : '#ff3df2'
+            : '#ff3df2'
     const emissiveMaterial = material as THREE.MeshStandardMaterial
     if (!emissiveMaterial || !('emissive' in emissiveMaterial)) return
     if (usesInstanceColor) {
@@ -830,7 +780,7 @@ export class NeonRenderer {
     }
     emissiveMaterial.emissive = new THREE.Color(color)
     emissiveMaterial.emissiveIntensity =
-      modelId === 'skylineTower' ? 0.18 : modelId === 'gatePost' || modelId === 'trackSlab' ? 0.32 : 0.56
+      modelId === 'gatePost' || modelId === 'trackSlab' ? 0.32 : 0.56
     emissiveMaterial.toneMapped = false
   }
 
@@ -954,13 +904,13 @@ export class NeonRenderer {
     const material = this.shipMaterials.get(vehicle.id)
     if (material) {
       material.emissive.set(vehicle.slipstreamPulse > 0.05 ? '#ff3df2' : vehicle.isBoosting ? '#5dfd7a' : colorForPower(vehicle.power))
-      material.emissiveIntensity = 0.32 + vehicle.boostIntensity * 0.72 + vehicle.airbrakeExitPulse * 0.82 + vehicle.slipstreamPulse * 0.48
+      material.emissiveIntensity = 0.32 + vehicle.boostIntensity * 0.72 + vehicle.airbrakeExitPulse * 0.82 + vehicle.slipstreamPulse * 0.24
     }
     const sourceMaterials = group.userData.sourceMaterials as THREE.MeshStandardMaterial[] | undefined
     if (sourceMaterials) {
       for (const sourceMaterial of sourceMaterials) {
         sourceMaterial.emissive.set(vehicle.slipstreamPulse > 0.05 ? '#ff3df2' : vehicle.isBoosting ? '#5dfd7a' : colorForPower(vehicle.power))
-        sourceMaterial.emissiveIntensity = 0.14 + vehicle.boostIntensity * 0.42 + vehicle.airbrakeExitPulse * 0.48 + vehicle.slipstreamPulse * 0.34
+        sourceMaterial.emissiveIntensity = 0.14 + vehicle.boostIntensity * 0.42 + vehicle.airbrakeExitPulse * 0.48 + vehicle.slipstreamPulse * 0.16
       }
     }
 
@@ -970,7 +920,7 @@ export class NeonRenderer {
         vehicle.telemetry.speedRatio * 0.72 +
           vehicle.boostIntensity * 0.52 +
           vehicle.speedPadPulse * 0.34 +
-          vehicle.slipstreamPulse * 0.46,
+          vehicle.slipstreamPulse * 0.24,
         0.18,
         1.72,
       )
@@ -1094,11 +1044,14 @@ export class NeonRenderer {
   }
 
   private updateSlipstream(race: RaceState): void {
+    const player = race.vehicles.find((vehicle) => vehicle.id === race.playerId) ?? race.vehicles[0]
     const segments = race.slipstream.segments
       .filter((segment) => segment.ownerId !== race.playerId)
       .slice(-RENDERED_SLIPSTREAM_SEGMENTS)
     this.renderedSlipstreamSegmentCount = 0
     this.renderedSlipstreamGroundBandCount = 0
+    this.playerSlipstreamVisualBandCount = 0
+    this.playerSlipstreamVisualStrength = 0
     for (let index = 0; index < RENDERED_SLIPSTREAM_SEGMENTS; index += 1) {
       const segment = segments[index]
       if (!segment) {
@@ -1107,6 +1060,7 @@ export class NeonRenderer {
         this.slipstreamMesh.setMatrixAt(index, this.slipstreamDummy.matrix)
         this.slipstreamGroundMesh.setMatrixAt(index, this.slipstreamDummy.matrix)
         this.slipstreamMesh.setColorAt(index, this.slipstreamColor.setRGB(0, 0, 0))
+        this.slipstreamGroundMesh.setColorAt(index, this.slipstreamColor.setRGB(0, 0, 0))
         continue
       }
       const age = race.raceTime - segment.createdAt
@@ -1117,28 +1071,48 @@ export class NeonRenderer {
         this.slipstreamMesh.setMatrixAt(index, this.slipstreamDummy.matrix)
         this.slipstreamGroundMesh.setMatrixAt(index, this.slipstreamDummy.matrix)
         this.slipstreamMesh.setColorAt(index, this.slipstreamColor.setRGB(0, 0, 0))
+        this.slipstreamGroundMesh.setColorAt(index, this.slipstreamColor.setRGB(0, 0, 0))
         continue
+      }
+      const influence = slipstreamSegmentInfluence(
+        segment,
+        race.track,
+        player.id,
+        player.distance,
+        player.lane,
+        race.raceTime,
+      )
+      if (influence.strength > 0) {
+        this.playerSlipstreamVisualBandCount += 1
+        this.playerSlipstreamVisualStrength += influence.strength
       }
       this.renderedSlipstreamSegmentCount += 1
       this.renderedSlipstreamGroundBandCount += 1
       const profile = race.track.sample(segment.centerDistance)
       this.slipstreamDummy.position.copy(toThree(trackToWorld(race.track, segment.centerDistance, segment.lane, 0.48)))
       this.applyBasis(this.slipstreamDummy, profile.tangent, profile.right, profile.up)
-      this.slipstreamDummy.scale.set(segment.halfLength * 2.45, segment.halfWidth * 2.45 * (1 + alpha * 0.18), 1)
+      this.slipstreamDummy.scale.set(segment.halfLength * 2, segment.halfWidth * 2, 1)
       this.slipstreamDummy.updateMatrix()
       this.slipstreamGroundMesh.setMatrixAt(index, this.slipstreamDummy.matrix)
+      const activeStrength = clamp(influence.strength, 0, 1)
+      const groundBrightness = 0.28 + alpha * segment.intensity * 0.26 + activeStrength * 0.24
+      this.slipstreamGroundMesh.setColorAt(
+        index,
+        this.slipstreamColor.setRGB(groundBrightness, groundBrightness * 0.08, groundBrightness * 0.78),
+      )
 
       this.slipstreamDummy.position.copy(toThree(trackToWorld(race.track, segment.centerDistance, segment.lane, 1.05)))
       this.applyBasis(this.slipstreamDummy, profile.tangent, profile.up, profile.right)
-      this.slipstreamDummy.scale.set(segment.halfLength * 2.35, 1.7 + alpha * 1.3, 1)
+      this.slipstreamDummy.scale.set(segment.halfLength * 2, 1.05 + alpha * 0.82, 1)
       this.slipstreamDummy.updateMatrix()
       this.slipstreamMesh.setMatrixAt(index, this.slipstreamDummy.matrix)
-      const brightness = 0.28 + alpha * segment.intensity * 0.54
+      const brightness = 0.2 + alpha * segment.intensity * 0.32 + activeStrength * 0.16
       this.slipstreamMesh.setColorAt(index, this.slipstreamColor.setRGB(brightness, brightness * 0.14, brightness * 0.78))
     }
     this.slipstreamMesh.instanceMatrix.needsUpdate = true
     if (this.slipstreamMesh.instanceColor) this.slipstreamMesh.instanceColor.needsUpdate = true
     this.slipstreamGroundMesh.instanceMatrix.needsUpdate = true
+    if (this.slipstreamGroundMesh.instanceColor) this.slipstreamGroundMesh.instanceColor.needsUpdate = true
   }
 
   private updateGateHighlights(race: RaceState): void {
@@ -1187,7 +1161,7 @@ export class NeonRenderer {
       player.boostIntensity * 0.45 +
         player.speedPadPulse * 0.34 +
         player.airbrakeExitPulse * 0.3 +
-        player.slipstreamPulse * 0.18 +
+        player.slipstreamPulse * 0.08 +
         player.rivalPassPulse * 0.2 +
         player.knockoutRewardPulse * 0.26,
       0,
@@ -1247,7 +1221,7 @@ export class NeonRenderer {
       player.boostStartPulse * 0.45 +
       player.speedPadPulse * 2.55 +
       player.airbrakeExitPulse * 2.25 +
-      player.slipstreamPulse * 0.78 +
+      player.slipstreamPulse * 0.42 +
       player.rivalPassPulse * 1.44 +
       player.knockoutRewardPulse * 1.64 +
       player.crashOutLaunchRemaining * 0.72
@@ -1282,7 +1256,7 @@ export class NeonRenderer {
         player.boostIntensity * 9 +
         player.boostStartPulse * 3 +
         player.speedPadPulse * 8 +
-        player.slipstreamPulse * 4.8 +
+        player.slipstreamPulse * 2.4 +
         player.airbrakeExitPulse * 8 +
         player.rivalPassPulse * 5.6 +
         player.knockoutRewardPulse * 6.2 +

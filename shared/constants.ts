@@ -1,7 +1,8 @@
 export const FIXED_DT = 1 / 60
 export const MAX_ACCUMULATED_TIME = 0.18
 export const SBOX_TO_WEB_DISTANCE = 1 / 100
-export const SBOX_TO_WEB_SPEED = SBOX_TO_WEB_DISTANCE
+const WEB_RACE_SPEED_SCALE = 1.12
+export const SBOX_TO_WEB_SPEED = SBOX_TO_WEB_DISTANCE * WEB_RACE_SPEED_SCALE
 
 export type ShipProfileId = 'balanced' | 'swift' | 'heavy'
 
@@ -178,7 +179,8 @@ export const SLIPSTREAM = {
   lifetime: 5.6,
   halfLength: distanceScaled(1220),
   halfWidth: distanceScaled(255),
-  acceleration: scaled(4600),
+  acceleration: scaled(6200),
+  speedBonus: scaled(1650),
   lanePull: scaled(180),
   stackCap: 0.95,
   nearMaxFadeStart: 0.9,
