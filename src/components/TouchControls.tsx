@@ -1,4 +1,4 @@
-import { useEffect, useState, type PointerEvent } from 'react'
+import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import type { TouchCommand } from '../hooks/useNeonGame'
 import { triggerMobileHaptic } from './mobileFeedback'
 
@@ -64,6 +64,7 @@ const bindAction = (
 
 export function TouchControls({ airbrakeCharge, autoThrottle, onTouch, onReset }: Props) {
   const [boostPulseToken, setBoostPulseToken] = useState(0)
+  const boostPointerActive = useRef(false)
   const [pressed, setPressedState] = useState<Record<DriveButtonCommand, boolean>>({
     left: false,
     right: false,
@@ -105,11 +106,11 @@ export function TouchControls({ airbrakeCharge, autoThrottle, onTouch, onReset }
     setPressedState((current) => ({ ...current, [command]: active }))
   }
 
-  const armBoostPulse = () => {
+  const armBoostPulse = (withHaptic = true) => {
     setPressed('boost', true)
     onTouch('boost', true)
     setBoostPulseToken((token) => token + 1)
-    triggerMobileHaptic(18)
+    if (withHaptic) triggerMobileHaptic(18)
   }
 
   const boostButtonProps = () => ({
@@ -120,6 +121,7 @@ export function TouchControls({ airbrakeCharge, autoThrottle, onTouch, onReset }
       } catch {
         // Synthetic test events may not create a capturable pointer.
       }
+      boostPointerActive.current = true
       armBoostPulse()
     },
     onPointerUp: (event: PointerEvent<HTMLButtonElement>) => {
@@ -127,12 +129,17 @@ export function TouchControls({ airbrakeCharge, autoThrottle, onTouch, onReset }
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId)
       }
+      if (boostPointerActive.current) {
+        boostPointerActive.current = false
+        armBoostPulse(false)
+      }
     },
     onPointerCancel: (event: PointerEvent<HTMLButtonElement>) => {
       event.preventDefault()
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId)
       }
+      boostPointerActive.current = false
     },
     onContextMenu: (event: PointerEvent<HTMLButtonElement>) => {
       event.preventDefault()
