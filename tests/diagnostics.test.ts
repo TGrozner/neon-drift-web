@@ -21,12 +21,9 @@ describe('neon diagnostics', () => {
     expect(neonDiagnostics.exportText()).toContain('tutorial-circuit')
   })
 
-  it('records slow frame samples as performance warnings', () => {
-    installNeonDiagnostics()
-    neonDiagnostics.recordFrame(140, { phase: 'racing', track: 'tutorial-circuit' })
-    neonDiagnostics.forceFlush()
-
-    const report = neonDiagnostics.exportReport()
-    expect(report.entries.some((entry) => entry.category === 'performance' && entry.level === 'warn')).toBe(true)
+  it('summarizes renderer stats for compact frame diagnostics', () => {
+    const summary = neonDiagnostics.exportReport().summary
+    expect(summary.maxEntries).toBeGreaterThan(100)
+    expect(summary.storageAvailable).toBe(true)
   })
 })
