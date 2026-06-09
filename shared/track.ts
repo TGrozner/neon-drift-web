@@ -411,7 +411,7 @@ export const ALL_TRACKS: RaceTrack[] = SOURCE_TRACK_SPECS.map(makeSourceTrack)
 export const TUTORIAL_CIRCUIT: RaceTrack =
   ALL_TRACKS.find((track) => track.id === 'tutorial-circuit') ?? ALL_TRACKS[0]
 
-export const TRACKS: RaceTrack[] = [TUTORIAL_CIRCUIT]
+export const TRACKS: RaceTrack[] = ALL_TRACKS.filter((track) => track.id !== 'neon-oval')
 
 export const trackById = (id: TrackId): RaceTrack =>
   ALL_TRACKS.find((track) => track.id === id) ?? TUTORIAL_CIRCUIT

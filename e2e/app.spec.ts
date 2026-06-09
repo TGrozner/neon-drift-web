@@ -243,13 +243,14 @@ test('plays s&box menu feedback cues', async ({ page }) => {
   )).toBe(true)
 })
 
-test('only exposes the tutorial circuit as playable track', async ({ page }) => {
+test('exposes source-authored tracks except Neon Oval as playable tracks', async ({ page }) => {
   await goToGame(page)
   await expect(page.locator('.menu-meta')).toContainText('Tutorial Circuit')
-  await expect(page.locator('.track-option')).toHaveCount(1)
-  await expect(page.locator('.track-option')).toContainText('Tutorial Circuit')
+  await expect(page.locator('.track-option')).toHaveCount(10)
+  await expect(page.getByRole('button', { name: /Tutorial Circuit/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Inversion Ribbon/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Vortex Gauntlet/ })).toBeVisible()
   await expect(page.getByRole('button', { name: /Neon Oval/ })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: /Inversion Ribbon/ })).toHaveCount(0)
 })
 
 test('replays the tutorial on the dedicated tutorial circuit', async ({ page }) => {
@@ -457,6 +458,36 @@ test('starts a playable 3D race and renders canvas pixels', async ({ page }) => 
     slabs: 384,
     rails: 768,
   })
+})
+
+test('starts a playable source-authored stunt track', async ({ page }) => {
+  await goToGame(page)
+  await page.getByRole('button', { name: /Inversion Ribbon/ }).click()
+  await expect(page.locator('.menu-meta')).toContainText('Inversion Ribbon')
+  await page.getByTestId('start-race').click()
+  await focusRace(page)
+  await holdThrottle(page)
+  await expectMoving(page)
+  await expect.poll(() => canvasHasNonBlankPixels(page)).toBe(true)
+  await expect.poll(() => page.evaluate(() => {
+    const stats = (window as Window & typeof globalThis & {
+      __NEON_RENDER_STATS?: {
+        sourceTrackKitLoaded?: boolean
+        sourceTrackSlabModelCount?: number
+        sourceTrackRailModelCount?: number
+      }
+    }).__NEON_RENDER_STATS
+    return {
+      loaded: stats?.sourceTrackKitLoaded ?? false,
+      slabs: stats?.sourceTrackSlabModelCount ?? 0,
+      rails: stats?.sourceTrackRailModelCount ?? 0,
+    }
+  }), { timeout: 15_000 }).toEqual({
+    loaded: true,
+    slabs: 640,
+    rails: 1280,
+  })
+  await releaseThrottle(page)
 })
 
 test('keeps race audio synchronized with live race state', async ({ page }) => {

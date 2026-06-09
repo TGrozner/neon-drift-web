@@ -6,7 +6,7 @@ This build does not run Source 2 or s&box APIs in the browser. It recreates the 
 
 ## Current Scope
 
-- Tutorial Circuit as the single playable track. Legacy source track specs remain internal reference data, but they are not exposed in the game menu.
+- Tutorial Circuit plus the source-authored stunt tracks as playable tracks; the baseline Neon Oval is kept out of the game menu.
 - Track-space banking, gates, pads, start grid, rails, and slipstream wake rendering.
 - Three ship profiles: Balanced, Swift, Heavy.
 - Solo pack race with seven deterministic bots.

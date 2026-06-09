@@ -131,10 +131,15 @@ describe('track and pads', () => {
     expect(closestNonLocalDistance).toBeGreaterThan(22)
   })
 
-  it('exposes only the tutorial circuit as a playable track', () => {
-    expect(TRACKS.map((track) => track.id)).toEqual(['tutorial-circuit'])
+  it('exposes source-authored tracks except the baseline oval as playable tracks', () => {
+    const expectedPlayableTrackIds = SOURCE_TRACK_SPECS
+      .map((track) => track.id)
+      .filter((id) => id !== 'neon-oval')
+
+    expect(TRACKS.map((track) => track.id)).toEqual(expectedPlayableTrackIds)
     expect(TRACKS[0]).toBe(TUTORIAL_CIRCUIT)
     expect(TRACKS.some((track) => track.id === 'neon-oval')).toBe(false)
+    expect(TRACKS.some((track) => track.id === 'inversion-ribbon')).toBe(true)
   })
 
   it('keeps source-authored tracks inside smooth playable envelopes', () => {

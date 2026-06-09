@@ -23,7 +23,7 @@ The original prompt described a conservative top-down web migration. The target 
 
 Current delivered scope is the browser-native 3D cut:
 
-- Tutorial Circuit is the only playable web track. Other s&box source track specs remain as internal reference data for geometry audits.
+- Tutorial Circuit plus the current s&box source stunt layouts are playable in the web menu, with the baseline Neon Oval intentionally excluded.
 - Three ship profiles: Balanced, Swift, Heavy.
 - Solo race with deterministic pack bots.
 - Three.js renderer with prototype GLB ships, track kit, gates, pads, rails, start line, slipstream cues, and WebGL pixel checks.
