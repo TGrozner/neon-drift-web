@@ -745,9 +745,14 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
     if (vehicle.railDamageCooldown <= 0) {
       const hardHit = vehicle.forwardSpeed > TRACK_LIMITS.heavyHitSpeedThreshold && outwardSpeed > TRACK_LIMITS.glanceHitSpeedThreshold
       const retention = hardHit ? profile.railHeavyHitRetention : profile.railGlanceRetention
+      const forwardSeverity = saturate(Math.abs(vehicle.forwardSpeed) / Math.max(1, profile.boostSpeed))
+      const outwardSeverity = saturate(outwardSpeed / Math.max(1, TRACK_LIMITS.glanceHitSpeedThreshold * 1.65))
+      const pressureSeverity = saturate(vehicle.telemetry.railPressure)
       vehicle.forwardSpeed *= retention
-      const speedSeverity = saturate(vehicle.forwardSpeed / Math.max(1, profile.boostSpeed))
-      applyIntegrityDamage(vehicle, profile.railIntegrityDamage + profile.railSpeedIntegrityDamage * speedSeverity)
+      const impactSeverity = hardHit
+        ? 0.35 + forwardSeverity * 0.35 + outwardSeverity * 0.2 + pressureSeverity * 0.1
+        : 0.18 + forwardSeverity * 0.22 + outwardSeverity * 0.12 + pressureSeverity * 0.08
+      applyIntegrityDamage(vehicle, profile.railIntegrityDamage + profile.railSpeedIntegrityDamage * impactSeverity)
       vehicle.railDamageCooldown = TRACK_LIMITS.railDamageInterval
     }
   }

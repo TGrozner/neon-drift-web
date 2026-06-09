@@ -582,6 +582,56 @@ describe('ship physics', () => {
     expect(Math.abs(vehicle.lateralSpeed)).toBeGreaterThanOrEqual(firstRelease)
   })
 
+  it('keeps pinned rail slide from accelerating the ship forward', () => {
+    const vehicle = createVehicle('rail', 'Rail', 'balanced', true, 20, TUTORIAL_CIRCUIT.width * 0.5)
+    vehicle.forwardSpeed = SHIP_PROFILES.balanced.maxSpeed * 0.68
+    vehicle.lateralSpeed = 24
+
+    stepVehicle(vehicle, {
+      track: TUTORIAL_CIRCUIT,
+      input: { ...EMPTY_INPUT, throttle: 0, steer: 1 },
+      dt: 1 / 30,
+      slipstream: noSlipstream,
+      nearbyVehicles: 0,
+    })
+    const firstForwardSpeed = vehicle.forwardSpeed
+    vehicle.lane = TUTORIAL_CIRCUIT.width * 0.5
+    vehicle.lateralSpeed = 24
+
+    stepVehicle(vehicle, {
+      track: TUTORIAL_CIRCUIT,
+      input: { ...EMPTY_INPUT, throttle: 0, steer: 1 },
+      dt: 1 / 30,
+      slipstream: noSlipstream,
+      nearbyVehicles: 0,
+    })
+
+    expect(vehicle.forwardSpeed).toBeLessThanOrEqual(firstForwardSpeed)
+  })
+
+  it('chips integrity during sustained rail pressure without immediate knockout', () => {
+    const vehicle = createVehicle('rail', 'Rail', 'balanced', true, 20, TUTORIAL_CIRCUIT.width * 0.5)
+    vehicle.forwardSpeed = SHIP_PROFILES.balanced.boostSpeed * 0.92
+    vehicle.lateralSpeed = 32
+    vehicle.integrity = 1
+
+    for (let i = 0; i < 60; i += 1) {
+      vehicle.lane = TUTORIAL_CIRCUIT.width * 0.5
+      vehicle.lateralSpeed = Math.max(vehicle.lateralSpeed, 22)
+      stepVehicle(vehicle, {
+        track: TUTORIAL_CIRCUIT,
+        input: { ...EMPTY_INPUT, throttle: 1, steer: 1 },
+        dt: 1 / 60,
+        slipstream: noSlipstream,
+        nearbyVehicles: 0,
+      })
+    }
+
+    expect(vehicle.integrity).toBeGreaterThan(0.42)
+    expect(vehicle.integrity).toBeLessThan(0.92)
+    expect(vehicle.eliminated).toBe(false)
+  })
+
   it('auto-recovers if projected far outside the track footprint', () => {
     const vehicle = createVehicle('lost', 'Lost', 'balanced', true, 50, TUTORIAL_CIRCUIT.width * 2)
     vehicle.lastGateDistance = 12
