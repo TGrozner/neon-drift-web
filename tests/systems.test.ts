@@ -15,6 +15,7 @@ import {
   slipstreamSegmentInfluence,
 } from '../shared/slipstream'
 import { ALL_TRACKS, TUTORIAL_CIRCUIT, TRACKS, trackToWorld } from '../shared/track'
+import { travelYawForVehicle, visualYawForVehicle } from '../shared/vehicleVisuals'
 import { NeonAudioEngine } from '../src/audio/neonAudio'
 import { RaceOverlay } from '../src/components/RaceOverlay'
 import { TelemetryCockpit } from '../src/components/TelemetryCockpit'
@@ -436,22 +437,43 @@ describe('bot ai', () => {
 
     let maxBotYaw = 0
     let maxTravelMismatch = 0
+    let maxVisualTravelMismatch = 0
     let sustainedMismatchFrames = 0
+    let sustainedVisualMismatchFrames = 0
     for (let frame = 0; frame < 540; frame += 1) {
       updateRace(race, { throttle: 1, steer: 0, boost: false, airbrake: false, reset: false }, 1 / 60)
       for (const vehicle of race.vehicles) {
         if (vehicle.isPlayer || vehicle.finished || vehicle.forwardSpeed < 12) continue
-        const travelYaw = Math.atan2(vehicle.lateralSpeed, Math.max(1, Math.abs(vehicle.forwardSpeed)))
+        const travelYaw = travelYawForVehicle(vehicle)
+        const visualTravelMismatch = Math.abs(visualYawForVehicle(vehicle) - travelYaw)
         const mismatch = Math.abs(vehicle.yawOffset - travelYaw)
         maxBotYaw = Math.max(maxBotYaw, Math.abs(vehicle.yawOffset))
         maxTravelMismatch = Math.max(maxTravelMismatch, mismatch)
+        maxVisualTravelMismatch = Math.max(maxVisualTravelMismatch, visualTravelMismatch)
         if (mismatch > 0.58) sustainedMismatchFrames += 1
+        if (visualTravelMismatch > 0.48) sustainedVisualMismatchFrames += 1
       }
     }
 
     expect(maxBotYaw).toBeLessThan(0.92)
     expect(maxTravelMismatch).toBeLessThan(0.72)
+    expect(maxVisualTravelMismatch).toBeLessThan(0.56)
     expect(sustainedMismatchFrames).toBeLessThan(12)
+    expect(sustainedVisualMismatchFrames).toBeLessThan(8)
+  })
+
+  it('makes bumped bot visuals follow their actual travel direction', () => {
+    const bot = createVehicle('bot-visual', 'Bot Visual', 'balanced', false, 0, 0)
+    bot.forwardSpeed = SHIP_PROFILES.balanced.maxSpeed * 0.72
+    bot.lateralSpeed = SHIP_PROFILES.balanced.maxSpeed * 0.34
+    bot.yawOffset = -0.36
+    bot.packBumpPulse = 0.65
+
+    const travelYaw = travelYawForVehicle(bot)
+    const visualYaw = visualYawForVehicle(bot)
+
+    expect(Math.abs(visualYaw - travelYaw)).toBeLessThan(Math.abs(bot.yawOffset - travelYaw) * 0.42)
+    expect(Math.abs(visualYaw)).toBeLessThanOrEqual(0.92)
   })
 
   it('softens tutorial bots that are already ahead of the player', () => {

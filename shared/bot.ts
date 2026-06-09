@@ -175,12 +175,13 @@ export const getBotInput = (
   const wantsAirbrake = turnDegrees >= airbrakeThreshold && brake < 0.65
   const travelYaw = Math.atan2(vehicle.lateralSpeed, Math.max(1, Math.abs(vehicle.forwardSpeed)))
   const yawTravelMismatch = vehicle.yawOffset - travelYaw
+  const tangentYawDamping = 0.12 * (1 - saturate(Math.abs(yawTravelMismatch) / 0.62) * 0.72)
   const steerLimit = wantsAirbrake ? 0.82 : 0.68
   const rawSteer = clamp(
     laneError * laneGain -
       vehicle.lateralSpeed * lateralDamping -
       yawTravelMismatch * yawDamping -
-      vehicle.yawOffset * 0.12,
+      vehicle.yawOffset * tangentYawDamping,
     -steerLimit,
     steerLimit,
   )
