@@ -91,6 +91,63 @@ const steps: TutorialStep[] = [
   },
 ]
 
+const mobileSteps: TutorialStep[] = [
+  {
+    id: 'menu',
+    title: 'Pick a session',
+    body: 'Use the setup steps, keep Tutorial Circuit selected, then start the race.',
+    goal: 'Goal: choose a ship and start the tutorial track.',
+  },
+  {
+    id: 'launch',
+    title: 'Launch clean',
+    body: 'Auto-throttle is on mobile. Wait for GO and keep both thumbs ready on the lower pads.',
+    goal: 'Goal: start moving after the countdown.',
+  },
+  {
+    id: 'thrust',
+    title: 'Thumb steering',
+    body: 'Hold the left pad to turn left, or the right pad to turn right. Release to straighten.',
+    goal: 'Goal: steer left or right.',
+  },
+  {
+    id: 'airbrake',
+    title: 'Drift hold',
+    body: 'Hold DRIFT while steering, then release for exit speed. The DRIFT button shows charge.',
+    goal: 'Goal: perform one airbrake drift.',
+  },
+  {
+    id: 'boost',
+    title: 'Tap boost',
+    body: 'Tap BOOST once for a short burst. The button fill shows the active burst timing.',
+    goal: 'Goal: trigger one manual boost.',
+  },
+  {
+    id: 'pads',
+    title: 'Pads and meters',
+    body: 'Cyan pads add speed. Green pads refill BOOST and repair HULL in the mobile status panel.',
+    goal: 'Goal: hit a speed or energy pad.',
+  },
+  {
+    id: 'draft',
+    title: 'Draft the pack',
+    body: 'Follow another ship to build slipstream, then pass your rival.',
+    goal: 'Goal: draft traffic or keep racing.',
+  },
+  {
+    id: 'line',
+    title: 'Protect hull',
+    body: 'Rail pressure damages HULL. Keep your line clean and use RESET if you drift wide.',
+    goal: 'Goal: hold a clean line through the next bend.',
+  },
+  {
+    id: 'checkpoints',
+    title: 'Gates make laps',
+    body: 'Hit every checkpoint gate in order; the finish only counts after the lap gates.',
+    goal: 'Goal: clear the next checkpoint gate.',
+  },
+]
+
 type Props = {
   activeTrackId: TrackId
   race: RaceState
@@ -103,14 +160,16 @@ export function Tutorial({ activeTrackId, race, raceVersion }: Props) {
   const [index, setIndex] = useState(initiallyComplete ? steps.length : 0)
   const [acknowledged, setAcknowledged] = useState(false)
   const [mobileControlsActive, setMobileControlsActive] = useState(mobileControlsMatch)
-  const current = steps[index]
+  const activeSteps = mobileControlsActive ? mobileSteps : steps
+  const current = activeSteps[index]
   const visible =
     trainingTrackActive &&
-    !mobileControlsActive &&
     Boolean(current) &&
     race.phase !== 'finished' &&
     race.phase !== 'results' &&
-    (current?.id === 'menu' || race.phase !== 'menu')
+    (mobileControlsActive
+      ? current?.id !== 'menu' && race.phase !== 'menu'
+      : current?.id === 'menu' || race.phase !== 'menu')
   const awaitingAcknowledgement = visible && current?.id !== 'menu' && !acknowledged
 
   useEffect(() => {
@@ -126,7 +185,7 @@ export function Tutorial({ activeTrackId, race, raceVersion }: Props) {
     const onKey = (event: KeyboardEvent) => {
       if (event.code === 'F1') {
         setTutorialComplete(true)
-        setIndex(steps.length)
+        setIndex(activeSteps.length)
       }
       if (event.code === 'F2') {
         setTutorialComplete(false)
@@ -137,7 +196,18 @@ export function Tutorial({ activeTrackId, race, raceVersion }: Props) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [awaitingAcknowledgement, race.phase])
+  }, [activeSteps.length, awaitingAcknowledgement, race.phase])
+
+  useEffect(() => {
+    if (mobileControlsActive && race.phase !== 'menu' && activeSteps[index]?.id === 'menu') {
+      const timeout = window.setTimeout(() => {
+        setIndex(1)
+        setAcknowledged(false)
+      }, 0)
+      return () => window.clearTimeout(timeout)
+    }
+    return undefined
+  }, [activeSteps, index, mobileControlsActive, race.phase])
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -147,12 +217,12 @@ export function Tutorial({ activeTrackId, race, raceVersion }: Props) {
         return
       }
       if (!trainingTrackActive && tutorialComplete()) {
-        setIndex(steps.length)
+        setIndex(activeSteps.length)
         setAcknowledged(false)
       }
     }, 0)
     return () => window.clearTimeout(timeout)
-  }, [race.phase, trainingTrackActive])
+  }, [activeSteps.length, race.phase, trainingTrackActive])
 
   useEffect(() => {
     if (!current) return
@@ -161,22 +231,22 @@ export function Tutorial({ activeTrackId, race, raceVersion }: Props) {
     const stepId = current.id
     const timeout = window.setTimeout(() => {
       setIndex((value) => {
-        if (steps[value]?.id !== stepId) return value
+        if (activeSteps[value]?.id !== stepId) return value
         const next = value + 1
-        if (next >= steps.length) setTutorialComplete(true)
+        if (next >= activeSteps.length) setTutorialComplete(true)
         return next
       })
       setAcknowledged(false)
     }, 0)
     return () => window.clearTimeout(timeout)
-  }, [acknowledged, current, race, raceVersion])
+  }, [acknowledged, activeSteps, current, race, raceVersion])
 
   if (!visible) return null
-  const stepProgress = Math.min(1, (index + (awaitingAcknowledgement ? 0 : 0.15)) / steps.length)
+  const stepProgress = Math.min(1, (index + (awaitingAcknowledgement ? 0 : 0.15)) / activeSteps.length)
 
   return (
     <div className="tutorial" data-testid="tutorial">
-      <div className="tutorial-counter">{index + 1}/{steps.length}</div>
+      <div className="tutorial-counter">{index + 1}/{activeSteps.length}</div>
       <strong>{current.title}</strong>
       <p>{current.body}</p>
       <small>{awaitingAcknowledgement ? 'Confirm: click or press Enter when you have read this.' : current.goal}</small>

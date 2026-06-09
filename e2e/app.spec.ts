@@ -95,6 +95,27 @@ const touchInputState = async (page: import('@playwright/test').Page) =>
     return debugWindow.__NEON_INPUT_STATE__ ?? {}
   })
 
+const installVibrationSpy = async (page: Page) => {
+  await page.addInitScript(() => {
+    type VibrationWindow = Window & typeof globalThis & { __NEON_VIBRATIONS__: (number | number[])[] }
+    const vibrationWindow = window as VibrationWindow
+    vibrationWindow.__NEON_VIBRATIONS__ = []
+    Object.defineProperty(window.navigator, 'vibrate', {
+      configurable: true,
+      value: (pattern: number | number[]) => {
+        vibrationWindow.__NEON_VIBRATIONS__.push(pattern)
+        return true
+      },
+    })
+  })
+}
+
+const vibrationEvents = async (page: Page) =>
+  page.evaluate(() => {
+    const vibrationWindow = window as Window & typeof globalThis & { __NEON_VIBRATIONS__?: (number | number[])[] }
+    return vibrationWindow.__NEON_VIBRATIONS__ ?? []
+  })
+
 const goToGame = async (page: Page, { tutorialComplete = true } = {}) => {
   if (tutorialComplete) {
     await page.addInitScript((key) => localStorage.setItem(key, 'true'), tutorialStorageKey)
@@ -312,6 +333,11 @@ test('keeps the mobile event strip clear of the airbrake charge meter', async ({
     await page.locator('.event-strip span').allTextContents()
   ).includes('BOOST'), { timeout: 15_000 }).toBe(true)
   await expect(page.getByTestId('mobile-race-strip')).toBeVisible()
+  await expect(page.getByTestId('mobile-race-strip')).toContainText('BOOST')
+  await expect(page.getByTestId('mobile-race-strip')).toContainText('HULL')
+  await expect(page.getByTestId('mobile-race-strip')).toContainText('SPEED')
+  await expect(page.getByTestId('mobile-boost-meter')).toBeVisible()
+  await expect(page.getByTestId('mobile-integrity-meter')).toBeVisible()
   await expect.poll(() => elementsHaveNoVisibleOverlap(page, '.event-strip', '.airbrake-charge')).toBe(true)
   await expect.poll(() => elementsHaveNoVisibleOverlap(page, '.event-strip, .airbrake-charge', '.touch-controls')).toBe(true)
   await expect.poll(() => elementsHaveNoVisibleOverlap(page, '[data-testid="mobile-race-strip"]', '.hud-race, .touch-controls, .tutorial')).toBe(true)
@@ -321,8 +347,10 @@ test('keeps the mobile event strip clear of the airbrake charge meter', async ({
 
 test('drives with simplified mobile touch controls', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
+  await installVibrationSpy(page)
   await goToGame(page)
   await startRaceFromMenu(page)
+  await page.keyboard.press('F1')
   await expect(page.getByTestId('tutorial')).toBeHidden()
 
   const turnLeft = page.getByRole('button', { name: 'Turn left' })
@@ -332,6 +360,15 @@ test('drives with simplified mobile touch controls', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Boost' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Drift airbrake' })).toBeVisible()
 
+  const stripBox = await page.getByTestId('mobile-race-strip').boundingBox()
+  expect(stripBox).not.toBeNull()
+  await page.evaluate(() => window.getSelection()?.removeAllRanges())
+  await page.mouse.move(stripBox!.x + 12, stripBox!.y + 24)
+  await page.mouse.down()
+  await page.mouse.move(stripBox!.x + stripBox!.width - 12, stripBox!.y + stripBox!.height - 12)
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() ?? '')).toBe('')
+
   await page.waitForTimeout(4200)
   await expect.poll(() => hudSpeed(page)).toBeGreaterThan(0)
   await expect.poll(async () => (await touchInputState(page)).touchThrottle ?? 0).toBeGreaterThan(0.9)
@@ -339,28 +376,53 @@ test('drives with simplified mobile touch controls', async ({ page }) => {
   await turnRight.dispatchEvent('pointerdown', { pointerId: 7, button: 0, isPrimary: true, pointerType: 'touch' })
   await expect(turnRight).toHaveAttribute('aria-pressed', 'true')
   await expect.poll(async () => (await touchInputState(page)).touchSteer ?? 0).toBeLessThan(-0.9)
+  await expect.poll(async () => (await vibrationEvents(page)).length).toBeGreaterThan(0)
 
   const boost = page.getByRole('button', { name: 'Boost' })
   await boost.dispatchEvent('pointerdown', { pointerId: 8, button: 0, isPrimary: true, pointerType: 'touch' })
   await expect(boost).toHaveAttribute('aria-pressed', 'true')
+  await expect(boost.locator('.boost-fill')).toBeVisible()
   await expect.poll(async () => (await touchInputState(page)).touchBoost ?? false).toBe(true)
   await expect.poll(async () => (await touchInputState(page)).touchSteer ?? 0).toBeLessThan(-0.9)
-  await boost.dispatchEvent('pointercancel', { pointerId: 8, button: 0, isPrimary: true, pointerType: 'touch' })
+  await boost.dispatchEvent('pointerup', { pointerId: 8, button: 0, isPrimary: true, pointerType: 'touch' })
+  await expect.poll(async () => (await touchInputState(page)).touchBoost ?? false).toBe(true)
+  await expect.poll(async () => (await vibrationEvents(page)).some((pattern) => pattern === 18)).toBe(true)
+
+  const drift = page.getByRole('button', { name: 'Drift airbrake' })
+  await expect(drift).toBeVisible()
+  await drift.dispatchEvent('pointerdown', { pointerId: 10, button: 0, isPrimary: true, pointerType: 'touch' })
+  await expect(drift).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(async () => (await touchInputState(page)).touchAirbrake ?? false).toBe(true)
+  await expect.poll(async () => (await touchInputState(page)).touchSteer ?? 0).toBeLessThan(-0.9)
+  await drift.dispatchEvent('pointercancel', { pointerId: 10, button: 0, isPrimary: true, pointerType: 'touch' })
+  await expect.poll(async () => (await vibrationEvents(page)).some((pattern) => pattern === 12)).toBe(true)
 
   await turnRight.dispatchEvent('pointercancel', { pointerId: 7, button: 0, isPrimary: true, pointerType: 'touch' })
   await expect(turnRight).toHaveAttribute('aria-pressed', 'false')
   await expect.poll(async () => (await touchInputState(page)).touchSteer ?? 0).toBe(0)
+  await page.waitForTimeout(1_350)
+  await expect.poll(async () => (await touchInputState(page)).touchBoost ?? true).toBe(false)
 
   await turnLeft.dispatchEvent('pointerdown', { pointerId: 9, button: 0, isPrimary: true, pointerType: 'touch' })
   await expect(turnLeft).toHaveAttribute('aria-pressed', 'true')
   await expect.poll(async () => (await touchInputState(page)).touchSteer ?? 0).toBeGreaterThan(0.9)
   await turnLeft.dispatchEvent('pointercancel', { pointerId: 9, button: 0, isPrimary: true, pointerType: 'touch' })
 
-  const drift = page.getByRole('button', { name: 'Drift airbrake' })
   await drift.dispatchEvent('pointerdown', { pointerId: 8, button: 0, isPrimary: true, pointerType: 'touch' })
   await expect(drift).toHaveAttribute('aria-pressed', 'true')
   await drift.dispatchEvent('pointercancel', { pointerId: 8, button: 0, isPrimary: true, pointerType: 'touch' })
   await expect(drift).toHaveAttribute('aria-pressed', 'false')
+})
+
+test('shows mobile-specific tutorial copy', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await goToGame(page, { tutorialComplete: false })
+  await expect(page.getByTestId('mobile-menu-flow')).toBeVisible()
+  await expect(page.getByTestId('tutorial')).toHaveCount(0)
+  await startRaceFromMenu(page)
+  await expect(page.getByTestId('tutorial')).toBeVisible()
+  await expect(page.getByTestId('tutorial')).toContainText('Auto-throttle')
+  await expect(page.getByTestId('tutorial')).toContainText('lower pads')
 })
 
 test('clears held keyboard controls when the page loses focus', async ({ page }) => {

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ShipProfileId } from '../shared/constants'
+import { getPlayer } from '../shared/race'
 import type { TrackId } from '../shared/track'
 import { GameCanvas } from './components/GameCanvas'
 import { Hud } from './components/Hud'
@@ -18,6 +19,8 @@ function App() {
   const audio = useNeonAudio(race)
   const tutorialTrackId = race.phase === 'menu' ? selectedTrack : race.track.id
   const touchControlsActive = race.phase === 'warmup' || race.phase === 'countdown' || race.phase === 'racing'
+  const player = race.phase === 'menu' || race.phase === 'results' ? null : getPlayer(race)
+  const airbrakeCharge = player?.telemetry.airbrakeExitCharge ?? 0
 
   return (
     <main className="app-shell">
@@ -40,6 +43,7 @@ function App() {
       />
       <TouchControls
         key={touchControlsActive ? 'drive' : 'idle'}
+        airbrakeCharge={airbrakeCharge}
         autoThrottle={touchControlsActive}
         onTouch={setTouch}
         onReset={reset}

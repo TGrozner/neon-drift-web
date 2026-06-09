@@ -1,10 +1,45 @@
+import { useEffect, useRef } from 'react'
 import { RACE, SHIP_PROFILES } from '../../shared/constants'
+import type { Vehicle } from '../../shared/physics'
 import { gapToNext, getPlayer, type RaceState } from '../../shared/race'
 import { draftMeterRatio } from './draftSignals'
 import { standingsForHud } from './hudRows'
+import { triggerMobileHaptic } from './mobileFeedback'
 
 type Props = {
   race: RaceState
+}
+
+type MobilePulseSnapshot = {
+  boostStartPulse: number
+  rechargePadPulse: number
+  powerDamagePulse: number
+  crashOutPulse: number
+}
+
+function MobileRaceHaptics({ player }: { player: Vehicle }) {
+  const previousRef = useRef<MobilePulseSnapshot>({
+    boostStartPulse: 0,
+    rechargePadPulse: 0,
+    powerDamagePulse: 0,
+    crashOutPulse: 0,
+  })
+
+  useEffect(() => {
+    const previous = previousRef.current
+    if (player.boostStartPulse > 0.2 && previous.boostStartPulse <= 0.2) triggerMobileHaptic(18)
+    if (player.rechargePadPulse > 0.2 && previous.rechargePadPulse <= 0.2) triggerMobileHaptic([8, 28, 10])
+    if (player.powerDamagePulse > 0.2 && previous.powerDamagePulse <= 0.2) triggerMobileHaptic([18, 36, 18])
+    if (player.crashOutPulse > 0.2 && previous.crashOutPulse <= 0.2) triggerMobileHaptic([40, 60, 40])
+    previousRef.current = {
+      boostStartPulse: player.boostStartPulse,
+      rechargePadPulse: player.rechargePadPulse,
+      powerDamagePulse: player.powerDamagePulse,
+      crashOutPulse: player.crashOutPulse,
+    }
+  }, [player.boostStartPulse, player.crashOutPulse, player.powerDamagePulse, player.rechargePadPulse])
+
+  return null
 }
 
 const formatTime = (seconds: number): string => {
@@ -50,6 +85,7 @@ export function Hud({ race }: Props) {
 
   return (
     <div className="hud" data-testid="hud">
+      <MobileRaceHaptics player={player} />
       <div className="speed-vignette" style={{ opacity: boostFlash }} />
       <div className="hud-panel hud-speed">
         <div className="hud-label">SPEED</div>
@@ -88,7 +124,24 @@ export function Hud({ race }: Props) {
       <div className="mobile-race-strip" data-testid="mobile-race-strip">
         <strong>P{localPosition}/{race.vehicles.length}</strong>
         <span>GATE {player.nextGateIndex + 1} · {Math.round(nextGateDistance)}m</span>
+        <span>SPEED {formatSpeed(Math.abs(player.forwardSpeed))} km/h</span>
         <span>{nearestRival ? `${nearestRival.name} ${nearestRivalGap >= 0 ? '+' : ''}${Math.round(nearestRivalGap)}m` : 'CLEAR AIR'}</span>
+        <div className="mobile-status-bars">
+          <div className="mobile-status-row">
+            <span>BOOST</span>
+            <strong>{powerPct}</strong>
+            <div className="meter power" data-testid="mobile-boost-meter">
+              <span style={{ width: `${player.power * 100}%` }} />
+            </div>
+          </div>
+          <div className={player.telemetry.integrityCritical ? 'mobile-status-row warning' : 'mobile-status-row'}>
+            <span>HULL</span>
+            <strong>{integrityPct}</strong>
+            <div className="meter integrity" data-testid="mobile-integrity-meter">
+              <span style={{ width: `${player.integrity * 100}%` }} />
+            </div>
+          </div>
+        </div>
         <div className="mini-bars">
           <span style={{ width: `${nextUrgency * 100}%` }} />
           <span style={{ width: `${lineSafety * 100}%` }} />
