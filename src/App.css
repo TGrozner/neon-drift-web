@@ -1270,12 +1270,12 @@
   }
 
   .mobile-menu-flow .track-options {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 6px;
   }
 
   .mobile-menu-flow .track-option {
-    min-height: 46px;
+    min-height: 44px;
     padding: 7px;
   }
 
@@ -1283,7 +1283,25 @@
     min-height: 76px;
   }
 
+  .mobile-ready-step {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .mobile-ready-step > span {
+    grid-column: 1 / -1;
+  }
+
   .mobile-ready-card {
-    padding: 9px;
+    min-width: 0;
+    padding: 7px;
+  }
+
+  .mobile-ready-card strong {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }

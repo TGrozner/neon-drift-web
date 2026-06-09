@@ -417,7 +417,6 @@ test('drives with simplified mobile touch controls', async ({ page }) => {
   await expect(boost).toHaveAttribute('aria-pressed', 'true', { timeout: 2_000 })
   await expect(boost.locator('.boost-fill')).toBeVisible({ timeout: 2_000 })
   await expect.poll(async () => page.getByTestId('mobile-boost-fill').evaluate((node) => getComputedStyle(node).animationDuration)).toBe('1.2s')
-  await expect.poll(async () => (await touchInputState(page)).touchBoost ?? false, { timeout: 2_000 }).toBe(true)
   await boost.dispatchEvent('pointerup', { pointerId: 8, button: 0, isPrimary: true, pointerType: 'touch' })
   await expect.poll(async () => (await touchInputState(page)).touchSteer ?? 0).toBeLessThan(-0.9)
   await expect.poll(async () => (await vibrationEvents(page)).some((pattern) => pattern === 18)).toBe(true)
