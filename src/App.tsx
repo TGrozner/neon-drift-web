@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { ShipProfileId } from '../shared/constants'
 import { getPlayer } from '../shared/race'
 import type { TrackId } from '../shared/track'
+import { DiagnosticsPanel } from './components/DiagnosticsPanel'
 import { GameCanvas } from './components/GameCanvas'
 import { Hud } from './components/Hud'
 import { MenuPanel } from './components/MenuPanel'
@@ -50,6 +51,7 @@ function App() {
         onTouch={setTouch}
         onReset={reset}
       />
+      <DiagnosticsPanel />
     </main>
   )
 }
