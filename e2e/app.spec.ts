@@ -71,50 +71,6 @@ const canvasPixelStats = async (page: import('@playwright/test').Page) =>
     }
   })
 
-const canvasDraftCueStats = async (page: import('@playwright/test').Page) =>
-  page.evaluate(async () => {
-    const canvas = document.querySelector<HTMLCanvasElement>('canvas.game-canvas')
-    if (!canvas || canvas.width === 0 || canvas.height === 0) {
-      return { magentaPixelRatio: 0, maxMagentaScore: 0, maxRedBlueChannel: 0 }
-    }
-    const image = new Image()
-    image.src = canvas.toDataURL('image/png')
-    await image.decode()
-    const probe = document.createElement('canvas')
-    probe.width = 96
-    probe.height = 64
-    const context = probe.getContext('2d')
-    if (!context) return { magentaPixelRatio: 0, maxMagentaScore: 0, maxRedBlueChannel: 0 }
-    context.drawImage(image, 0, 0, probe.width, probe.height)
-    const pixels = context.getImageData(0, 0, probe.width, probe.height).data
-    const xMin = Math.floor(probe.width * 0.18)
-    const xMax = Math.floor(probe.width * 0.82)
-    const yMin = Math.floor(probe.height * 0.14)
-    const yMax = Math.floor(probe.height * 0.62)
-    let sampledPixels = 0
-    let magentaPixels = 0
-    let maxMagentaScore = 0
-    let maxRedBlueChannel = 0
-    for (let y = yMin; y < yMax; y += 1) {
-      for (let x = xMin; x < xMax; x += 1) {
-        const index = (y * probe.width + x) * 4
-        const r = pixels[index]
-        const g = pixels[index + 1]
-        const b = pixels[index + 2]
-        const magentaScore = Math.min(r, b) - g
-        sampledPixels += 1
-        maxMagentaScore = Math.max(maxMagentaScore, magentaScore)
-        maxRedBlueChannel = Math.max(maxRedBlueChannel, Math.min(r, b))
-        if (r > 105 && b > 95 && magentaScore > 28) magentaPixels += 1
-      }
-    }
-    return {
-      magentaPixelRatio: magentaPixels / Math.max(1, sampledPixels),
-      maxMagentaScore,
-      maxRedBlueChannel,
-    }
-  })
-
 const hudSpeed = async (page: import('@playwright/test').Page) =>
   Number.parseInt((await page.locator('.speed-readout').textContent()) ?? '0', 10)
 
@@ -267,8 +223,8 @@ test('lays out the menu choices without overlap', async ({ page }) => {
 test('plays s&box menu feedback cues', async ({ page }) => {
   await installAudioSpy(page)
   await goToGame(page)
-  await page.getByRole('button', { name: /Inversion Ribbon/ }).click()
-  await page.getByRole('button', { name: /Swift/ }).hover()
+  await page.getByRole('button', { name: /Swift/ }).click()
+  await page.getByRole('button', { name: /Heavy/ }).hover()
   await page.getByRole('button', { name: /Public Game Online/ }).click()
 
   const audioEvents = await page.evaluate(() => {
@@ -285,6 +241,15 @@ test('plays s&box menu feedback cues', async ({ page }) => {
     event.src.includes('menu_deny.wav') &&
     Math.abs((event.value ?? 0) - 0.66) < 0.01,
   )).toBe(true)
+})
+
+test('only exposes the tutorial circuit as playable track', async ({ page }) => {
+  await goToGame(page)
+  await expect(page.locator('.menu-meta')).toContainText('Tutorial Circuit')
+  await expect(page.locator('.track-option')).toHaveCount(1)
+  await expect(page.locator('.track-option')).toContainText('Tutorial Circuit')
+  await expect(page.getByRole('button', { name: /Neon Oval/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Inversion Ribbon/ })).toHaveCount(0)
 })
 
 test('replays the tutorial on the dedicated tutorial circuit', async ({ page }) => {
@@ -492,65 +457,6 @@ test('starts a playable 3D race and renders canvas pixels', async ({ page }) => 
     slabs: 384,
     rails: 768,
   })
-})
-
-test('starts a playable source-authored inversion track', async ({ page }) => {
-  await goToGame(page)
-  await page.getByRole('button', { name: /Inversion Ribbon/ }).click()
-  await expect(page.locator('.menu-meta')).toContainText('Inversion Ribbon')
-  await page.getByTestId('start-race').click()
-  await focusRace(page)
-  await holdThrottle(page)
-  await expectMoving(page)
-  await expect.poll(async () => (
-    await page.locator('.event-strip span').allTextContents()
-  ).includes('DRAFT'), { timeout: 8_000 }).toBe(true)
-  await expect.poll(() => page.evaluate(() => {
-    const stats = (window as Window & typeof globalThis & {
-      __NEON_RENDER_STATS?: {
-        playerSlipstreamPulse?: number
-        playerSlipstreamVisualBandCount?: number
-        playerSlipstreamVisualStrength?: number
-        renderedSlipstreamSegmentCount?: number
-        renderedSlipstreamGroundBandCount?: number
-        slipstreamSegmentCount?: number
-        rivalDraftWakeCount?: number
-      }
-    }).__NEON_RENDER_STATS
-    return (
-      (stats?.playerSlipstreamPulse ?? 0) > 0 &&
-      (stats?.playerSlipstreamVisualBandCount ?? 0) > 0 &&
-      (stats?.playerSlipstreamVisualStrength ?? 0) > 0 &&
-      (stats?.renderedSlipstreamSegmentCount ?? 0) > 0 &&
-      (stats?.renderedSlipstreamGroundBandCount ?? 0) > 0 &&
-      (stats?.rivalDraftWakeCount ?? 0) > 0 &&
-      (stats?.slipstreamSegmentCount ?? 0) > (stats?.renderedSlipstreamSegmentCount ?? 0)
-    )
-  }), { timeout: 4_000 }).toBe(true)
-  await expect.poll(async () => {
-    const stats = await canvasDraftCueStats(page)
-    return stats.magentaPixelRatio > 0.0005 && stats.maxMagentaScore > 70 && stats.maxRedBlueChannel > 150
-  }, { timeout: 4_000 }).toBe(true)
-  await expect.poll(() => canvasHasNonBlankPixels(page)).toBe(true)
-  await expect.poll(() => page.evaluate(() => {
-    const stats = (window as Window & typeof globalThis & {
-      __NEON_RENDER_STATS?: {
-        sourceTrackKitLoaded?: boolean
-        sourceTrackSlabModelCount?: number
-        sourceTrackRailModelCount?: number
-      }
-    }).__NEON_RENDER_STATS
-    return {
-      loaded: stats?.sourceTrackKitLoaded ?? false,
-      slabs: stats?.sourceTrackSlabModelCount ?? 0,
-      rails: stats?.sourceTrackRailModelCount ?? 0,
-    }
-  }), { timeout: 15_000 }).toEqual({
-    loaded: true,
-    slabs: 640,
-    rails: 1280,
-  })
-  await releaseThrottle(page)
 })
 
 test('keeps race audio synchronized with live race state', async ({ page }) => {

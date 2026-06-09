@@ -4,7 +4,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { createBotBrain, getBotInput } from '../shared/bot'
 import { FIXED_DT, RACE, SHIP_PROFILES, SLIPSTREAM } from '../shared/constants'
 import { clamp, cross3, distanceAlongForward, dot3, signedWrappedDelta, wrapDistance } from '../shared/math'
-import { EMPTY_INPUT, createVehicle } from '../shared/physics'
+import { EMPTY_INPUT, crashOut, createVehicle } from '../shared/physics'
 import { isInsidePad, triggerTrackPads } from '../shared/pads'
 import { applyTutorialBotAssist, getPlayer, startRace, updateRace, updateRivals, updateStandings } from '../shared/race'
 import { SOURCE_TRACK_SPECS } from '../shared/sourceTracks'
@@ -14,7 +14,7 @@ import {
   sampleSlipstream,
   slipstreamSegmentInfluence,
 } from '../shared/slipstream'
-import { NEON_OVAL, TRACKS, trackToWorld } from '../shared/track'
+import { ALL_TRACKS, TUTORIAL_CIRCUIT, TRACKS, trackToWorld } from '../shared/track'
 import { NeonAudioEngine } from '../src/audio/neonAudio'
 import { Tutorial } from '../src/components/Tutorial'
 import { draftMeterRatio } from '../src/components/draftSignals'
@@ -52,21 +52,21 @@ describe('numeric guardrails', () => {
 
 describe('track and pads', () => {
   it('has valid length, gates, grid, and pads on the track', () => {
-    expect(NEON_OVAL.totalLength).toBeGreaterThan(100)
-    expect(NEON_OVAL.gates).toHaveLength(8)
-    expect(NEON_OVAL.startGrid).toHaveLength(8)
-    for (const pad of NEON_OVAL.pads) {
-      expect(Math.abs(pad.lane)).toBeLessThan(NEON_OVAL.width * 0.5)
+    expect(TUTORIAL_CIRCUIT.totalLength).toBeGreaterThan(100)
+    expect(TUTORIAL_CIRCUIT.gates).toHaveLength(8)
+    expect(TUTORIAL_CIRCUIT.startGrid).toHaveLength(8)
+    for (const pad of TUTORIAL_CIRCUIT.pads) {
+      expect(Math.abs(pad.lane)).toBeLessThan(TUTORIAL_CIRCUIT.width * 0.5)
       expect(pad.distance).toBeGreaterThanOrEqual(0)
-      expect(pad.distance).toBeLessThan(NEON_OVAL.totalLength)
-      expect(isInsidePad(NEON_OVAL, pad, pad.distance, pad.lane)).toBe(true)
+      expect(pad.distance).toBeLessThan(TUTORIAL_CIRCUIT.totalLength)
+      expect(isInsidePad(TUTORIAL_CIRCUIT, pad, pad.distance, pad.lane)).toBe(true)
     }
   })
 
   it('builds every source-authored track with finite samples and valid pads', () => {
-    expect(TRACKS).toHaveLength(11)
-    expect(TRACKS[0].id).toBe('tutorial-circuit')
-    for (const track of TRACKS) {
+    expect(ALL_TRACKS).toHaveLength(SOURCE_TRACK_SPECS.length)
+    expect(ALL_TRACKS[0].id).toBe('tutorial-circuit')
+    for (const track of ALL_TRACKS) {
       const sourceSpec = SOURCE_TRACK_SPECS.find((spec) => spec.id === track.id)
       expect(track.totalLength).toBeGreaterThan(100)
       expect(track.gates).toHaveLength(8)
@@ -91,7 +91,7 @@ describe('track and pads', () => {
   })
 
   it('includes the Vortex Gauntlet as a high-inversion stunt track', () => {
-    const vortex = TRACKS.find((track) => track.id === 'vortex-gauntlet')
+    const vortex = ALL_TRACKS.find((track) => track.id === 'vortex-gauntlet')
     const spec = SOURCE_TRACK_SPECS.find((track) => track.id === 'vortex-gauntlet')
 
     expect(vortex?.name).toBe('Vortex Gauntlet')
@@ -131,17 +131,14 @@ describe('track and pads', () => {
     expect(closestNonLocalDistance).toBeGreaterThan(22)
   })
 
-  it('makes the tutorial circuit wider and less crowded than the baseline oval', () => {
-    const tutorial = TRACKS.find((track) => track.id === 'tutorial-circuit')
-
-    expect(tutorial?.width).toBeGreaterThan(NEON_OVAL.width)
-    expect(tutorial?.startGrid[4].back).toBeGreaterThan(NEON_OVAL.startGrid[4].back)
-    expect(tutorial?.startGrid[0].lane).toBe(0)
-    expect(Math.abs(tutorial?.startGrid[3].lane ?? 0)).toBeGreaterThan(Math.abs(NEON_OVAL.startGrid[3].lane))
+  it('exposes only the tutorial circuit as a playable track', () => {
+    expect(TRACKS.map((track) => track.id)).toEqual(['tutorial-circuit'])
+    expect(TRACKS[0]).toBe(TUTORIAL_CIRCUIT)
+    expect(TRACKS.some((track) => track.id === 'neon-oval')).toBe(false)
   })
 
   it('keeps source-authored tracks inside smooth playable envelopes', () => {
-    for (const track of TRACKS) {
+    for (const track of ALL_TRACKS) {
       let maxTangentDelta = 0
       let maxBankDelta = 0
       let maxFrameDot = 0
@@ -174,17 +171,17 @@ describe('track and pads', () => {
   })
 
   it('transforms track coordinates to 3D world positions', () => {
-    const world = trackToWorld(NEON_OVAL, 12, 2, 1)
+    const world = trackToWorld(TUTORIAL_CIRCUIT, 12, 2, 1)
     expect(Number.isFinite(world.x)).toBe(true)
     expect(Number.isFinite(world.y)).toBe(true)
     expect(Number.isFinite(world.z)).toBe(true)
   })
 
   it('triggers pads with swept crossing and respects per-vehicle cooldown', () => {
-    const pad = NEON_OVAL.pads[0]
+    const pad = TUTORIAL_CIRCUIT.pads[0]
     const cooldowns = {}
     const first = triggerTrackPads(
-      NEON_OVAL,
+      TUTORIAL_CIRCUIT,
       cooldowns,
       'ship',
       pad.distance - pad.halfLength - 1,
@@ -195,7 +192,7 @@ describe('track and pads', () => {
     )
     expect(first).toHaveLength(1)
     const second = triggerTrackPads(
-      NEON_OVAL,
+      TUTORIAL_CIRCUIT,
       cooldowns,
       'ship',
       pad.distance - pad.halfLength,
@@ -213,7 +210,7 @@ describe('slipstream', () => {
     const state = createSlipstreamState()
     const emitted = publishSlipstream(
       state,
-      NEON_OVAL,
+      TUTORIAL_CIRCUIT,
       'owner',
       60,
       0,
@@ -222,7 +219,7 @@ describe('slipstream', () => {
       1,
     )
     expect(emitted).toBe(true)
-    const ownerSample = sampleSlipstream(state, NEON_OVAL, 'owner', 48, 0, 1.1)
+    const ownerSample = sampleSlipstream(state, TUTORIAL_CIRCUIT, 'owner', 48, 0, 1.1)
     expect(ownerSample.strength).toBe(0)
   })
 
@@ -231,7 +228,7 @@ describe('slipstream', () => {
     for (let i = 0; i < 8; i += 1) {
       publishSlipstream(
         state,
-        NEON_OVAL,
+        TUTORIAL_CIRCUIT,
         `owner-${i}`,
         80 + i * 0.02,
         0,
@@ -241,9 +238,9 @@ describe('slipstream', () => {
       )
     }
     const now = 2
-    const inside = sampleSlipstream(state, NEON_OVAL, 'ship', 68, 0, now)
-    const outside = sampleSlipstream(state, NEON_OVAL, 'ship', 68, SLIPSTREAM.halfWidth + 2, now)
-    const old = sampleSlipstream(state, NEON_OVAL, 'ship', 68, 0, SLIPSTREAM.lifetime + 8)
+    const inside = sampleSlipstream(state, TUTORIAL_CIRCUIT, 'ship', 68, 0, now)
+    const outside = sampleSlipstream(state, TUTORIAL_CIRCUIT, 'ship', 68, SLIPSTREAM.halfWidth + 2, now)
+    const old = sampleSlipstream(state, TUTORIAL_CIRCUIT, 'ship', 68, 0, SLIPSTREAM.lifetime + 8)
 
     expect(inside.strength).toBeGreaterThan(0)
     expect(inside.strength).toBeLessThanOrEqual(SLIPSTREAM.stackCap)
@@ -255,7 +252,7 @@ describe('slipstream', () => {
     const state = createSlipstreamState()
     expect(publishSlipstream(
       state,
-      NEON_OVAL,
+      TUTORIAL_CIRCUIT,
       'owner',
       80,
       0,
@@ -264,17 +261,17 @@ describe('slipstream', () => {
       1,
     )).toBe(true)
     const segment = state.segments[0]
-    const sample = sampleSlipstream(state, NEON_OVAL, 'player', segment.centerDistance, 0, 1.2)
-    const influence = slipstreamSegmentInfluence(segment, NEON_OVAL, 'player', segment.centerDistance, 0, 1.2)
+    const sample = sampleSlipstream(state, TUTORIAL_CIRCUIT, 'player', segment.centerDistance, 0, 1.2)
+    const influence = slipstreamSegmentInfluence(segment, TUTORIAL_CIRCUIT, 'player', segment.centerDistance, 0, 1.2)
     const outside = slipstreamSegmentInfluence(
       segment,
-      NEON_OVAL,
+      TUTORIAL_CIRCUIT,
       'player',
       segment.centerDistance,
       segment.halfWidth + 0.01,
       1.2,
     )
-    const owner = slipstreamSegmentInfluence(segment, NEON_OVAL, 'owner', segment.centerDistance, 0, 1.2)
+    const owner = slipstreamSegmentInfluence(segment, TUTORIAL_CIRCUIT, 'owner', segment.centerDistance, 0, 1.2)
 
     expect(influence.strength).toBeGreaterThan(0)
     expect(sample.strength).toBeCloseTo(Math.min(influence.strength, SLIPSTREAM.stackCap))
@@ -371,7 +368,7 @@ describe('bot ai', () => {
     bot.forwardSpeed = SHIP_PROFILES.balanced.maxSpeed * 0.72
     ahead.forwardSpeed = SHIP_PROFILES.heavy.maxSpeed * 0.18
     const brain = createBotBrain('bot', 0.4)
-    const input = getBotInput(brain, NEON_OVAL, bot, [bot, ahead], 1 / 60)
+    const input = getBotInput(brain, TUTORIAL_CIRCUIT, bot, [bot, ahead], 1 / 60)
     expect(Math.abs(input.steer) + (1 - input.throttle)).toBeGreaterThan(0.05)
     expect(brain.trafficBrakeIntent).toBeGreaterThan(0)
   })
@@ -383,16 +380,16 @@ describe('bot ai', () => {
     ahead.forwardSpeed = SHIP_PROFILES.swift.maxSpeed * 0.58
     const brain = createBotBrain('bot', 0.4)
 
-    getBotInput(brain, NEON_OVAL, bot, [bot, ahead], 1 / 60)
+    getBotInput(brain, TUTORIAL_CIRCUIT, bot, [bot, ahead], 1 / 60)
 
     expect(brain.trafficBrakeIntent).toBe(0)
   })
 
   it('targets useful pads deterministically', () => {
-    const bot = createVehicle('bot', 'Bot', 'balanced', false, NEON_OVAL.pads[0].distance - 8, 0)
+    const bot = createVehicle('bot', 'Bot', 'balanced', false, TUTORIAL_CIRCUIT.pads[0].distance - 8, 0)
     const brain = createBotBrain('bot', 0.4)
-    const first = getBotInput(brain, NEON_OVAL, bot, [bot], 1 / 60)
-    const second = getBotInput(createBotBrain('bot', 0.4), NEON_OVAL, bot, [bot], 1 / 60)
+    const first = getBotInput(brain, TUTORIAL_CIRCUIT, bot, [bot], 1 / 60)
+    const second = getBotInput(createBotBrain('bot', 0.4), TUTORIAL_CIRCUIT, bot, [bot], 1 / 60)
     expect(first.steer).toBe(second.steer)
     expect(brain.wantsPad).toBe(true)
   })
@@ -406,8 +403,8 @@ describe('bot ai', () => {
     leftYaw.forwardSpeed = SHIP_PROFILES.balanced.maxSpeed * 0.62
     leftYaw.yawOffset = -0.92
 
-    expect(getBotInput(createBotBrain('bot', 0.4), NEON_OVAL, rightYaw, [rightYaw], 1 / 60).steer).toBeLessThan(-0.3)
-    expect(getBotInput(createBotBrain('bot', 0.4), NEON_OVAL, leftYaw, [leftYaw], 1 / 60).steer).toBeGreaterThan(0.3)
+    expect(getBotInput(createBotBrain('bot', 0.4), TUTORIAL_CIRCUIT, rightYaw, [rightYaw], 1 / 60).steer).toBeLessThan(-0.3)
+    expect(getBotInput(createBotBrain('bot', 0.4), TUTORIAL_CIRCUIT, leftYaw, [leftYaw], 1 / 60).steer).toBeGreaterThan(0.3)
   })
 
   it('keeps autonomous launch traffic out of sustained full-lock yaw', () => {
@@ -514,8 +511,8 @@ describe('race flow', () => {
     expect(race.lastToast).toBe('')
   })
 
-  it('keeps a short oval race from ending before there is meaningful driving time', () => {
-    const race = startRace('balanced', 'neon-oval')
+  it('keeps the tutorial race from ending before there is meaningful driving time', () => {
+    const race = startRace('balanced', 'tutorial-circuit')
     const input = { throttle: 1, steer: 0, boost: false, airbrake: false, reset: false }
     for (let i = 0; i < 12 / (1 / 60); i += 1) {
       updateRace(race, input, 1 / 60)
@@ -548,6 +545,31 @@ describe('race flow', () => {
     expect(Math.abs(rival.lane - player.lane)).toBeGreaterThan(0.2)
     expect(player.power).toBeGreaterThanOrEqual(0.4)
     expect(player.integrity).toBeLessThan(0.7)
+  })
+
+  it('charges more pack contact damage to the closing ship', () => {
+    const race = startRace('balanced')
+    race.phase = 'racing'
+    const player = getPlayer(race)
+    const rival = race.vehicles[1]
+    if (!rival) throw new Error('Missing rival')
+    player.profileId = 'balanced'
+    rival.profileId = 'balanced'
+    player.distance = 50
+    rival.distance = 49.72
+    player.lane = 0
+    rival.lane = 0
+    player.forwardSpeed = 20
+    rival.forwardSpeed = 58
+    player.integrity = 0.7
+    rival.integrity = 0.7
+
+    updateRace(race, EMPTY_INPUT, 1 / 600)
+
+    expect(player.packBumpPulse).toBeGreaterThan(0)
+    expect(rival.packBumpPulse).toBeGreaterThan(0)
+    expect(player.integrity).toBeLessThan(0.7)
+    expect(rival.integrity).toBeLessThan(player.integrity)
   })
 
   it('does not trigger pads by sweeping from a pre-reset position', () => {
@@ -593,6 +615,56 @@ describe('race flow', () => {
     expect(player.knockoutRewardPulse).toBe(1)
     expect(player.rivalPassPulse).toBe(0)
     expect(race.lastToast).toBe('KO ENERGY')
+  })
+
+  it('ends the run when the player is permanently eliminated', () => {
+    const race = startRace('balanced')
+    race.phase = 'racing'
+    const player = getPlayer(race)
+
+    crashOut(player)
+    updateRace(race, EMPTY_INPUT, 1 / 60)
+
+    expect(player.finished).toBe(true)
+    expect(player.eliminated).toBe(true)
+    expect(player.crashOutLaunchRemaining).toBe(0)
+    expect(race.phase).toBe('finished')
+    expect(race.lastToast).toBe('CRASH OUT')
+
+    updateRace(race, EMPTY_INPUT, RACE.resultsDelaySeconds + 0.01)
+
+    expect(race.phase).toBe('results')
+  })
+
+  it('rewards overtakes outside the previous rival window', () => {
+    const race = startRace('balanced')
+    race.phase = 'racing'
+    const player = getPlayer(race)
+    const staleRivals = race.vehicles.slice(1, 4)
+    const passedRival = race.vehicles[4]
+    if (!passedRival) throw new Error('Missing rival')
+
+    race.rivals = staleRivals
+    player.distance = 50
+    player.lane = 0
+    player.forwardSpeed = 110
+    player.power = 0.35
+    player.integrity = 0.48
+    passedRival.distance = 50.45
+    passedRival.lane = race.track.width * 0.35
+    passedRival.forwardSpeed = 0
+    for (const [index, vehicle] of staleRivals.entries()) {
+      vehicle.distance = 95 + index * 8
+      vehicle.lane = race.track.width * -0.35
+      vehicle.forwardSpeed = 0
+    }
+
+    updateRace(race, { throttle: 1, steer: 0, boost: false, airbrake: false, reset: false }, 1 / 60)
+
+    expect(player.rivalPassPulse).toBe(1)
+    expect(player.power).toBeGreaterThan(0.4)
+    expect(player.integrity).toBeGreaterThan(0.5)
+    expect(race.lastToast).toBe('RIVAL PASSED')
   })
 
   it('separates exact same-lane pack overlaps deterministically', () => {
@@ -708,7 +780,7 @@ describe('browser integration helpers', () => {
   })
 
   it('builds right-handed render bases from authored track frames', () => {
-    for (const track of TRACKS) {
+    for (const track of ALL_TRACKS) {
       for (let i = 0; i < 16; i += 1) {
         const profile = track.sample((track.totalLength * i) / 16)
         const basis = createRenderBasis(profile.tangent, profile.up, profile.right)
@@ -840,6 +912,51 @@ describe('browser integration helpers', () => {
     engine.dispose()
 
     expect(audioEvents.filter((event) => event.src.endsWith('/finish.wav'))).toHaveLength(1)
+  })
+
+  it('plays crash-out feedback without recovery launch for permanent death', () => {
+    const audioEvents: { type: 'play'; src: string }[] = []
+
+    class FakeAudio {
+      readonly src: string
+      loop = false
+      currentTime = 0
+      volume = 1
+      playbackRate = 1
+
+      constructor(src = '') {
+        this.src = src
+      }
+
+      play() {
+        audioEvents.push({ type: 'play', src: this.src })
+        return Promise.resolve()
+      }
+
+      pause() {
+        return undefined
+      }
+    }
+
+    vi.stubGlobal('Audio', FakeAudio)
+    const race = startRace('balanced')
+    race.phase = 'racing'
+    const engine = new NeonAudioEngine()
+    engine.unlock()
+    engine.sync(race)
+
+    crashOut(getPlayer(race))
+    engine.sync(race, 0)
+    expect(audioEvents.some((event) => event.src.endsWith('/crash_out.wav'))).toBe(true)
+    expect(audioEvents.some((event) => event.src.endsWith('/crash_launch.wav'))).toBe(false)
+
+    updateRace(race, EMPTY_INPUT, RACE.resultsDelaySeconds + 0.01)
+    engine.sync(race, RACE.resultsDelaySeconds + 0.01)
+    engine.dispose()
+
+    expect(getPlayer(race).eliminated).toBe(true)
+    expect(race.phase).toBe('finished')
+    expect(audioEvents.some((event) => event.src.endsWith('/crash_launch.wav'))).toBe(false)
   })
 
   it('plays s&box menu feedback cues on explicit menu commands', () => {

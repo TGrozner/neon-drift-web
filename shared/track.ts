@@ -406,12 +406,15 @@ const makeSourceTrack = (spec: SourceTrackSpec): RaceTrack => {
   return track
 }
 
-export const TRACKS: RaceTrack[] = SOURCE_TRACK_SPECS.map(makeSourceTrack)
+export const ALL_TRACKS: RaceTrack[] = SOURCE_TRACK_SPECS.map(makeSourceTrack)
 
-export const NEON_OVAL: RaceTrack = TRACKS.find((track) => track.id === 'neon-oval') ?? TRACKS[0]
+export const TUTORIAL_CIRCUIT: RaceTrack =
+  ALL_TRACKS.find((track) => track.id === 'tutorial-circuit') ?? ALL_TRACKS[0]
+
+export const TRACKS: RaceTrack[] = [TUTORIAL_CIRCUIT]
 
 export const trackById = (id: TrackId): RaceTrack =>
-  TRACKS.find((track) => track.id === id) ?? NEON_OVAL
+  ALL_TRACKS.find((track) => track.id === id) ?? TUTORIAL_CIRCUIT
 
 export const trackToWorld = (
   track: RaceTrack,

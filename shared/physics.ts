@@ -84,6 +84,7 @@ export type Vehicle = {
   lastGateIndex: number
   lastGateDistance: number
   finished: boolean
+  eliminated: boolean
   finalPosition: number
   finishTime: number
   timePenalty: number
@@ -161,6 +162,7 @@ export const createVehicle = (
   lastGateIndex: 0,
   lastGateDistance: 0,
   finished: false,
+  eliminated: false,
   finalPosition: 0,
   finishTime: -1,
   timePenalty: 0,
@@ -305,7 +307,8 @@ export const syncResourceTelemetry = (vehicle: Vehicle): void => {
 
 export const applyIntegrityDamage = (vehicle: Vehicle, amount: number): void => {
   if (amount <= 0 || vehicle.crashOutGraceRemaining > 0 || vehicle.finished) return
-  vehicle.integrity = saturate(vehicle.integrity - amount)
+  const cappedDamage = Math.min(amount, INTEGRITY.maxSingleHitDamage)
+  vehicle.integrity = saturate(vehicle.integrity - cappedDamage)
   vehicle.powerDamagePulse = 1
   syncResourceTelemetry(vehicle)
   if (vehicle.integrity <= 0) crashOut(vehicle)
@@ -324,16 +327,15 @@ export const crashOut = (vehicle: Vehicle): void => {
   vehicle.lateralSpeed = 0
   vehicle.visualBank = 0
   vehicle.visualPitch = 0
-  vehicle.distance = vehicle.lastGateDistance
-  vehicle.lane = 0
   syncSweepOrigin(vehicle)
-  vehicle.power = Math.max(vehicle.power, CRASH_OUT.restorePower)
-  vehicle.integrity = CRASH_OUT.restoreIntegrity
+  vehicle.power = 0
+  vehicle.integrity = 0
+  vehicle.finished = true
+  vehicle.eliminated = true
   vehicle.crashOutCount += 1
-  vehicle.timePenalty += CRASH_OUT.timePenaltySeconds
-  vehicle.crashOutLockRemaining = CRASH_OUT.lockSeconds
-  vehicle.crashOutGraceRemaining = CRASH_OUT.lockSeconds + CRASH_OUT.graceSeconds
-  vehicle.crashOutLaunchRemaining = CRASH_OUT.respawnBoostSeconds
+  vehicle.crashOutLockRemaining = 0
+  vehicle.crashOutGraceRemaining = 0
+  vehicle.crashOutLaunchRemaining = 0
   vehicle.crashOutPulse = 1
   vehicle.packBumpPulse = 0
   vehicle.wrongWaySeconds = 0
@@ -345,6 +347,7 @@ export const crashOut = (vehicle: Vehicle): void => {
 }
 
 export const resetToLastGate = (vehicle: Vehicle): void => {
+  if (vehicle.eliminated) return
   vehicle.distance = vehicle.lastGateDistance
   vehicle.lane = 0
   syncSweepOrigin(vehicle)

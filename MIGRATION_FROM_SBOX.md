@@ -23,7 +23,7 @@ The original prompt described a conservative top-down web migration. The target 
 
 Current delivered scope is the browser-native 3D cut:
 
-- Tutorial Circuit plus all nine current s&box source track layouts: Neon Oval, Friend Circuit, Skyline Sprint, Banked Speedway, Gravity Loop, Helix Loop, Inversion Ribbon, Corkscrew Relay, and Looping Inferno.
+- Tutorial Circuit is the only playable web track. Other s&box source track specs remain as internal reference data for geometry audits.
 - Three ship profiles: Balanced, Swift, Heavy.
 - Solo race with deterministic pack bots.
 - Three.js renderer with prototype GLB ships, track kit, gates, pads, rails, start line, slipstream cues, and WebGL pixel checks.
@@ -67,8 +67,8 @@ Current delivered scope is the browser-native 3D cut:
 - Boost activation threshold, continue threshold, ramp up/down and empty lockout.
 - Power regen throttle/coast and off-track penalty.
 - Clean-line regen bonus.
-- Rail damage and crash-out recovery.
-- Checkpoint reset, partial power/integrity restore, grace period, time penalty.
+- Rail damage, capped single-impact damage, and permanent crash-out elimination once Integrity is exhausted.
+- Manual checkpoint reset for recovery before death.
 - Boost and recharge pads with swept trigger and per-ship cooldown.
 - Track-space slipstream segments, sampling, lane pull, stack cap and self-exclusion.
 - Pack-aware bot lane changes, traffic brake, pad targeting, boost and airbrake use.
@@ -129,7 +129,7 @@ Tuning values were normalized from s&box scale using a `1/100` speed factor, pre
 - Manual boost drains Power.
 - Power recharges when not boosting.
 - Rail collision damages Integrity.
-- Crash-out resets to checkpoint and applies penalty.
+- A large crash can push Integrity deep into danger, but a single hit from a healthy state is capped; crash-out permanently eliminates the ship once Integrity is exhausted.
 - Slipstream appears behind fast ships and helps catch the pack.
 - Bots form traffic and overtake.
 - Boost/recharge pads trigger.

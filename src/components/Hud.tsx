@@ -1,4 +1,4 @@
-import { CRASH_OUT, RACE, SHIP_PROFILES } from '../../shared/constants'
+import { RACE, SHIP_PROFILES } from '../../shared/constants'
 import { gapToNext, getPlayer, type RaceState } from '../../shared/race'
 import { draftMeterRatio } from './draftSignals'
 import { standingsForHud } from './hudRows'
@@ -166,16 +166,6 @@ export function Hud({ race }: Props) {
           <span style={{ width: `${Math.min(1, player.telemetry.airbrakeExitCharge) * 100}%` }} />
         </div>
       </div>
-
-      {player.crashOutLockRemaining > 0 && (
-        <div className="crash-overlay">
-          <strong>CRASH OUT</strong>
-          <span>Integrity rebooting +{CRASH_OUT.timePenaltySeconds.toFixed(1)}s</span>
-          <div className="meter">
-            <span style={{ width: `${100 - (player.crashOutLockRemaining / CRASH_OUT.lockSeconds) * 100}%` }} />
-          </div>
-        </div>
-      )}
     </div>
   )
 }

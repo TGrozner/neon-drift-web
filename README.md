@@ -6,12 +6,12 @@ This build does not run Source 2 or s&box APIs in the browser. It recreates the 
 
 ## Current Scope
 
-- Tutorial Circuit plus the nine current s&box source track layouts: Neon Oval, Friend Circuit, Skyline Sprint, Banked Speedway, Gravity Loop, Helix Loop, Inversion Ribbon, Corkscrew Relay, and Looping Inferno.
+- Tutorial Circuit as the single playable track. Legacy source track specs remain internal reference data, but they are not exposed in the game menu.
 - Track-space banking, gates, pads, start grid, rails, and slipstream wake rendering.
 - Three ship profiles: Balanced, Swift, Heavy.
 - Solo pack race with seven deterministic bots.
 - Warmup, countdown, launch boost, racing, finish/results phase.
-- Drift/airbrake, airbrake exit boost, manual boost, power economy, integrity damage, crash-out recovery.
+- Drift/airbrake, airbrake exit boost, manual boost, power economy, capped impact integrity damage, and permanent crash-out elimination once Integrity is exhausted.
 - Boost/recharge pads, slipstream, pack-aware bot inputs, standings, HUD, tutorial, mobile controls.
 - Prototype GLB ship and track-kit assets loaded through Three.js.
 

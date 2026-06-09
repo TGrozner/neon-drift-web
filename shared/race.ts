@@ -1,5 +1,5 @@
 import { createBotBrain, getBotInput, type BotBrain } from './bot'
-import { CRASH_OUT, PACK_CONTACT, RACE, SHIP_PROFILES, TRACK_LIMITS, type ShipProfileId } from './constants'
+import { PACK_CONTACT, RACE, SHIP_PROFILES, TRACK_LIMITS, type ShipProfileId } from './constants'
 import { distanceAlongForward, signedWrappedDelta } from './math'
 import { triggerTrackPads, type PadCooldownState } from './pads'
 import {
@@ -154,6 +154,9 @@ const progressFor = (race: RaceState, vehicle: Vehicle): number => {
 
 export const updateStandings = (race: RaceState): void => {
   race.standings = [...race.vehicles].sort((a, b) => {
+    if (a.eliminated && b.eliminated) return progressFor(race, b) - progressFor(race, a)
+    if (a.eliminated) return 1
+    if (b.eliminated) return -1
     if (a.finished && b.finished) return (a.finalPosition || 999) - (b.finalPosition || 999) || a.finishTime - b.finishTime
     if (a.finished) return -1
     if (b.finished) return 1
@@ -266,16 +269,17 @@ const applyPackInteractions = (race: RaceState, dt: number): void => {
       a.packBumpPulse = Math.max(a.packBumpPulse, bump)
       b.packBumpPulse = Math.max(b.packBumpPulse, bump)
 
-      const noseRisk = Math.max(aNoseContact, bNoseContact)
       const closingRisk = Math.max(
         0,
         (strongestClosing - PACK_CONTACT.bumpDamageClosingGrace) /
           Math.max(0.001, 1 - PACK_CONTACT.bumpDamageClosingGrace),
       )
-      const damageScale = PACK_CONTACT.bumpSideDamageScale + (1 - PACK_CONTACT.bumpSideDamageScale) * noseRisk
-      const damage = PACK_CONTACT.bumpIntegrityDamage * bump * damageScale * (0.35 + closingRisk * 0.65)
-      applyIntegrityDamage(a, damage)
-      applyIntegrityDamage(b, damage)
+      const damage = PACK_CONTACT.bumpIntegrityDamage * bump * (0.35 + closingRisk * 0.65)
+      const frontalDamageScale = 1 - PACK_CONTACT.bumpSideDamageScale
+      const aDamageScale = PACK_CONTACT.bumpSideDamageScale + frontalDamageScale * aNoseContact
+      const bDamageScale = PACK_CONTACT.bumpSideDamageScale + frontalDamageScale * bNoseContact
+      applyIntegrityDamage(a, damage * aDamageScale)
+      applyIntegrityDamage(b, damage * bDamageScale)
     }
   }
 }
@@ -320,12 +324,10 @@ const applyRivalPassReward = (
   beforeCrashOutCounts: Record<string, number>,
 ): void => {
   const player = getPlayer(race)
+  if (player.finished) return
   const beforePlayer = beforeProgress[player.id] ?? 0
   const afterPlayer = progressFor(race, player)
-  const rivals = race.rivals.length > 0
-    ? race.rivals
-    : race.vehicles.filter((vehicle) => vehicle.id !== player.id && !vehicle.finished)
-  for (const other of rivals) {
+  for (const other of race.vehicles) {
     if (other.id === player.id || other.finished) continue
     if (other.crashOutCount > (beforeCrashOutCounts[other.id] ?? 0)) continue
     const beforeOther = beforeProgress[other.id] ?? 0
@@ -351,7 +353,7 @@ const applyRivalCrashOutReward = (
   const beforePlayer = beforeProgress[player.id] ?? progressFor(race, player)
   const maxRewardGap = Math.min(110, race.track.totalLength * 0.28)
   for (const other of race.vehicles) {
-    if (other.id === player.id || other.finished) continue
+    if (other.id === player.id) continue
     if (other.crashOutCount <= (beforeCrashOutCounts[other.id] ?? 0)) continue
     const beforeOther = beforeProgress[other.id] ?? progressFor(race, other)
     if (Math.abs(beforeOther - beforePlayer) > maxRewardGap) continue
@@ -479,15 +481,20 @@ export const updateRace = (
       )
     }
 
-    if (vehicle.isPlayer && vehicle.crashOutPulse > 0.95) {
-      setToast(race, `CRASH OUT +${CRASH_OUT.timePenaltySeconds.toFixed(1)}s`)
-    }
+    if (vehicle.isPlayer && vehicle.crashOutPulse > 0.95) setToast(race, 'CRASH OUT')
   }
 
   applyRivalCrashOutReward(race, beforeCrashOutCounts, beforeProgress)
   applyRivalPassReward(race, beforeProgress, beforeCrashOutCounts)
   updateStandings(race)
   updateRivals(race)
+
+  const player = getPlayer(race)
+  if (player.eliminated && race.phase === 'racing') {
+    race.phase = 'finished'
+    race.phaseTime = 0
+    setToast(race, 'CRASH OUT')
+  }
 
   if (race.phase === 'finished' && race.phaseTime >= RACE.resultsDelaySeconds) {
     race.phase = 'results'

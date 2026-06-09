@@ -142,6 +142,7 @@ export const POWER = {
 export const INTEGRITY = {
   criticalThreshold: 0.24,
   damagedThreshold: 0.58,
+  maxSingleHitDamage: 0.64,
   rechargePadRepair: 0.08,
   cleanLineRepair: 0.018,
   slipstreamRepair: 0.012,
@@ -149,15 +150,12 @@ export const INTEGRITY = {
 }
 
 export const CRASH_OUT = {
-  restorePower: 0.35,
-  restoreIntegrity: 0.58,
   lockSeconds: 0.95,
   stallSeconds: 0.48,
   respawnSpeed: scaled(1180),
   respawnBoostSeconds: 0.95,
   respawnBoostSpeedBonus: scaled(620),
   graceSeconds: 1.6,
-  timePenaltySeconds: 3,
 }
 
 export const RACE = {

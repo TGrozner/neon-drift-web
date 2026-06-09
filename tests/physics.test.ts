@@ -8,7 +8,7 @@ import {
   stepVehicle,
 } from '../shared/physics'
 import { distanceAlongForward } from '../shared/math'
-import { NEON_OVAL, trackById, type RaceTrack } from '../shared/track'
+import { TUTORIAL_CIRCUIT, trackById, type RaceTrack } from '../shared/track'
 
 const noSlipstream = {
   strength: 0,
@@ -121,7 +121,7 @@ describe('ship physics', () => {
     vehicle.lateralSpeed = SHIP_PROFILES.balanced.maxSpeed
 
     stepVehicle(vehicle, {
-      track: NEON_OVAL,
+      track: TUTORIAL_CIRCUIT,
       input: { ...EMPTY_INPUT, throttle: 1 },
       dt: 0.001,
       slipstream: noSlipstream,
@@ -140,14 +140,14 @@ describe('ship physics', () => {
     neutral.forwardSpeed = 40
 
     stepVehicle(invalid, {
-      track: NEON_OVAL,
+      track: TUTORIAL_CIRCUIT,
       input: { ...EMPTY_INPUT, throttle: Number.NaN, steer: Number.NaN },
       dt: 1 / 60,
       slipstream: noSlipstream,
       nearbyVehicles: 0,
     })
     stepVehicle(neutral, {
-      track: NEON_OVAL,
+      track: TUTORIAL_CIRCUIT,
       input: EMPTY_INPUT,
       dt: 1 / 60,
       slipstream: noSlipstream,
@@ -166,14 +166,14 @@ describe('ship physics', () => {
     airbrake.lateralSpeed = 10
 
     stepVehicle(normal, {
-      track: NEON_OVAL,
+      track: TUTORIAL_CIRCUIT,
       input: { ...EMPTY_INPUT, throttle: 1, steer: 1 },
       dt: 1 / 30,
       slipstream: noSlipstream,
       nearbyVehicles: 0,
     })
     stepVehicle(airbrake, {
-      track: NEON_OVAL,
+      track: TUTORIAL_CIRCUIT,
       input: { ...EMPTY_INPUT, throttle: 1, steer: 1, airbrake: true },
       dt: 1 / 30,
       slipstream: noSlipstream,
@@ -187,7 +187,7 @@ describe('ship physics', () => {
   it('does not trigger airbrake exit boost before minimum hold', () => {
     const vehicle = createVehicle('ship', 'Ship', 'balanced', true, 20, 0)
     stepVehicle(vehicle, {
-      track: NEON_OVAL,
+      track: TUTORIAL_CIRCUIT,
       input: { ...EMPTY_INPUT, throttle: 1, steer: 1, airbrake: true },
       dt: 0.08,
       slipstream: noSlipstream,
@@ -195,7 +195,7 @@ describe('ship physics', () => {
     })
     const before = vehicle.forwardSpeed
     stepVehicle(vehicle, {
-      track: NEON_OVAL,
+      track: TUTORIAL_CIRCUIT,
       input: { ...EMPTY_INPUT, throttle: 1, steer: 1 },
       dt: 0.016,
       slipstream: noSlipstream,
@@ -209,7 +209,7 @@ describe('ship physics', () => {
   it('does not trigger airbrake exit boost without steer or lateral slip', () => {
     const vehicle = createVehicle('ship', 'Ship', 'balanced', true, 20, 0)
     stepVehicle(vehicle, {
-      track: NEON_OVAL,
+      track: TUTORIAL_CIRCUIT,
       input: { ...EMPTY_INPUT, throttle: 1, steer: 0, airbrake: true },
       dt: 0.32,
       slipstream: noSlipstream,
@@ -217,7 +217,7 @@ describe('ship physics', () => {
     })
     const before = vehicle.forwardSpeed
     stepVehicle(vehicle, {
-      track: NEON_OVAL,
+      track: TUTORIAL_CIRCUIT,
       input: { ...EMPTY_INPUT, throttle: 1, steer: 0 },
       dt: 0.016,
       slipstream: noSlipstream,
@@ -229,13 +229,13 @@ describe('ship physics', () => {
   })
 
   it('does not trigger airbrake exit boost while already at the rail', () => {
-    const vehicle = createVehicle('ship', 'Ship', 'balanced', true, 20, NEON_OVAL.width * 0.5)
+    const vehicle = createVehicle('ship', 'Ship', 'balanced', true, 20, TUTORIAL_CIRCUIT.width * 0.5)
     vehicle.isAirbraking = true
     vehicle.airbrakeHoldSeconds = 0.32
     vehicle.lateralSpeed = 8
 
     stepVehicle(vehicle, {
-      track: NEON_OVAL,
+      track: TUTORIAL_CIRCUIT,
       input: { ...EMPTY_INPUT, throttle: 1, steer: 1 },
       dt: 0.016,
       slipstream: noSlipstream,
@@ -249,7 +249,7 @@ describe('ship physics', () => {
     const vehicle = createVehicle('ship', 'Ship', 'balanced', true, 20, 0)
     vehicle.lateralSpeed = 8
     stepVehicle(vehicle, {
-      track: NEON_OVAL,
+      track: TUTORIAL_CIRCUIT,
       input: { ...EMPTY_INPUT, throttle: 1, steer: 1, airbrake: true },
       dt: 0.28,
       slipstream: noSlipstream,
@@ -257,7 +257,7 @@ describe('ship physics', () => {
     })
     const before = vehicle.forwardSpeed
     stepVehicle(vehicle, {
-      track: NEON_OVAL,
+      track: TUTORIAL_CIRCUIT,
       input: { ...EMPTY_INPUT, throttle: 1, steer: 1 },
       dt: 0.016,
       slipstream: noSlipstream,
@@ -268,7 +268,7 @@ describe('ship physics', () => {
     expect(afterFirst).toBeGreaterThan(before)
 
     stepVehicle(vehicle, {
-      track: NEON_OVAL,
+      track: TUTORIAL_CIRCUIT,
       input: { ...EMPTY_INPUT, throttle: 1, steer: 1, airbrake: true },
       dt: 0.28,
       slipstream: noSlipstream,
@@ -276,7 +276,7 @@ describe('ship physics', () => {
     })
     vehicle.airbrakeExitPulse = 0
     stepVehicle(vehicle, {
-      track: NEON_OVAL,
+      track: TUTORIAL_CIRCUIT,
       input: { ...EMPTY_INPUT, throttle: 1, steer: 1 },
       dt: 0.016,
       slipstream: noSlipstream,
@@ -289,7 +289,7 @@ describe('ship physics', () => {
     const vehicle = createVehicle('ship', 'Ship', 'balanced', true, 20, 0)
     vehicle.power = SHIP_PROFILES.balanced.boostActivationThreshold - 0.01
     stepVehicle(vehicle, {
-      track: NEON_OVAL,
+      track: TUTORIAL_CIRCUIT,
       input: { ...EMPTY_INPUT, throttle: 1, boost: true },
       dt: 0.016,
       slipstream: noSlipstream,
@@ -300,7 +300,7 @@ describe('ship physics', () => {
     vehicle.power = 0.05
     vehicle.isBoosting = true
     stepVehicle(vehicle, {
-      track: NEON_OVAL,
+      track: TUTORIAL_CIRCUIT,
       input: { ...EMPTY_INPUT, throttle: 1, boost: true },
       dt: 0.016,
       slipstream: noSlipstream,
@@ -310,7 +310,7 @@ describe('ship physics', () => {
 
     vehicle.power = 0.026
     stepVehicle(vehicle, {
-      track: NEON_OVAL,
+      track: TUTORIAL_CIRCUIT,
       input: { ...EMPTY_INPUT, throttle: 1, boost: true },
       dt: 0.5,
       slipstream: noSlipstream,
@@ -336,7 +336,7 @@ describe('ship physics', () => {
     banked.lateralSpeed = 12
 
     stepVehicle(straight, {
-      track: NEON_OVAL,
+      track: TUTORIAL_CIRCUIT,
       input: { ...EMPTY_INPUT, throttle: 1, steer: 1 },
       dt: 1 / 30,
       slipstream: noSlipstream,
@@ -370,21 +370,21 @@ describe('ship physics', () => {
     }
 
     stepVehicle(lowSpeed, {
-      track: NEON_OVAL,
+      track: TUTORIAL_CIRCUIT,
       input: { ...EMPTY_INPUT, throttle: 0 },
       dt: 1 / 60,
       slipstream,
       nearbyVehicles: 0,
     })
     stepVehicle(nearMax, {
-      track: NEON_OVAL,
+      track: TUTORIAL_CIRCUIT,
       input: { ...EMPTY_INPUT, throttle: 0 },
       dt: 1 / 60,
       slipstream,
       nearbyVehicles: 0,
     })
     stepVehicle(aboveDraft, {
-      track: NEON_OVAL,
+      track: TUTORIAL_CIRCUIT,
       input: { ...EMPTY_INPUT, throttle: 0 },
       dt: 1 / 60,
       slipstream,
@@ -448,23 +448,53 @@ describe('ship physics', () => {
     expect(vehicle.crashOutCount).toBe(0)
   })
 
-  it('crash-out restores checkpoint, integrity, power floor, grace, and penalty', () => {
+  it('caps one huge crash into critical damage instead of an instant knockout', () => {
+    const vehicle = createVehicle('ship', 'Ship', 'balanced', true, 40, 3)
+    vehicle.power = 0.72
+    vehicle.integrity = 0.92
+
+    applyIntegrityDamage(vehicle, 2)
+
+    expect(vehicle.power).toBe(0.72)
+    expect(vehicle.integrity).toBeCloseTo(0.92 - INTEGRITY.maxSingleHitDamage)
+    expect(vehicle.telemetry.integrityCritical).toBe(false)
+    expect(vehicle.telemetry.integrityDamaged).toBe(true)
+    expect(vehicle.finished).toBe(false)
+    expect(vehicle.eliminated).toBe(false)
+    expect(vehicle.crashOutCount).toBe(0)
+  })
+
+  it('crash-out permanently eliminates the ship without recovery boost', () => {
     const vehicle = createVehicle('ship', 'Ship', 'balanced', true, 40, 3)
     vehicle.previousDistance = 36
     vehicle.previousLane = 2
     vehicle.lastGateDistance = 25
     vehicle.power = 0.08
+    vehicle.integrity = 0.42
     applyIntegrityDamage(vehicle, 2)
 
-    expect(vehicle.distance).toBe(25)
-    expect(vehicle.lane).toBe(0)
+    expect(vehicle.distance).toBe(40)
+    expect(vehicle.lane).toBe(3)
     expect(vehicle.previousDistance).toBe(vehicle.distance)
     expect(vehicle.previousLane).toBe(vehicle.lane)
-    expect(vehicle.power).toBeGreaterThanOrEqual(CRASH_OUT.restorePower)
-    expect(vehicle.integrity).toBe(CRASH_OUT.restoreIntegrity)
+    expect(vehicle.power).toBe(0)
+    expect(vehicle.integrity).toBe(0)
+    expect(vehicle.finished).toBe(true)
+    expect(vehicle.eliminated).toBe(true)
     expect(vehicle.crashOutCount).toBe(1)
-    expect(vehicle.timePenalty).toBe(3)
-    expect(vehicle.crashOutGraceRemaining).toBeGreaterThan(1)
+    expect(vehicle.timePenalty).toBe(0)
+    expect(vehicle.crashOutGraceRemaining).toBe(0)
+    expect(vehicle.crashOutLaunchRemaining).toBe(0)
+
+    stepVehicle(vehicle, {
+      track: TUTORIAL_CIRCUIT,
+      input: EMPTY_INPUT,
+      dt: CRASH_OUT.lockSeconds - 0.01,
+      slipstream: noSlipstream,
+      nearbyVehicles: 0,
+    })
+    expect(vehicle.forwardSpeed).toBe(0)
+    expect(vehicle.crashOutLaunchRemaining).toBe(0)
   })
 
   it('repairs damaged integrity through slipstream comeback pressure', () => {
@@ -511,7 +541,7 @@ describe('ship physics', () => {
     const vehicle = createVehicle('ship', 'Ship', 'balanced', true, 40, 0)
     for (let i = 0; i < 80; i += 1) {
       stepVehicle(vehicle, {
-        track: NEON_OVAL,
+        track: TUTORIAL_CIRCUIT,
         input: { ...EMPTY_INPUT, throttle: -1 },
         dt: 1 / 60,
         slipstream: noSlipstream,
@@ -524,12 +554,12 @@ describe('ship physics', () => {
   })
 
   it('pins rail contact and increases release feedback while scraping', () => {
-    const vehicle = createVehicle('rail', 'Rail', 'balanced', true, 20, NEON_OVAL.width * 0.5)
+    const vehicle = createVehicle('rail', 'Rail', 'balanced', true, 20, TUTORIAL_CIRCUIT.width * 0.5)
     vehicle.forwardSpeed = SHIP_PROFILES.balanced.maxSpeed * 0.8
     vehicle.lateralSpeed = 18
 
     stepVehicle(vehicle, {
-      track: NEON_OVAL,
+      track: TUTORIAL_CIRCUIT,
       input: { ...EMPTY_INPUT, throttle: 1, steer: 1 },
       dt: 1 / 30,
       slipstream: noSlipstream,
@@ -537,10 +567,10 @@ describe('ship physics', () => {
     })
     const firstHold = vehicle.railContactHoldSeconds
     const firstRelease = Math.abs(vehicle.lateralSpeed)
-    vehicle.lane = NEON_OVAL.width * 0.5
+    vehicle.lane = TUTORIAL_CIRCUIT.width * 0.5
     vehicle.lateralSpeed = 18
     stepVehicle(vehicle, {
-      track: NEON_OVAL,
+      track: TUTORIAL_CIRCUIT,
       input: { ...EMPTY_INPUT, throttle: 1, steer: 1 },
       dt: 1 / 30,
       slipstream: noSlipstream,
@@ -553,12 +583,12 @@ describe('ship physics', () => {
   })
 
   it('auto-recovers if projected far outside the track footprint', () => {
-    const vehicle = createVehicle('lost', 'Lost', 'balanced', true, 50, NEON_OVAL.width * 2)
+    const vehicle = createVehicle('lost', 'Lost', 'balanced', true, 50, TUTORIAL_CIRCUIT.width * 2)
     vehicle.lastGateDistance = 12
     vehicle.forwardSpeed = SHIP_PROFILES.balanced.maxSpeed
 
     stepVehicle(vehicle, {
-      track: NEON_OVAL,
+      track: TUTORIAL_CIRCUIT,
       input: { ...EMPTY_INPUT, throttle: 1 },
       dt: 1 / 60,
       slipstream: noSlipstream,
