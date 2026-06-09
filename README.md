@@ -66,9 +66,12 @@ errors or unhandled promise rejections.
 
 To get a report from a phone after someone says it lagged:
 
-1. Open the production URL with `?logs=1` appended.
-2. Tap `Copier` in the diagnostics panel.
-3. Paste the JSON report into the issue, chat, or debugging thread.
+1. Tap the `LOGS` button in the bottom-right corner.
+2. Tap `Partager` to open the mobile share sheet, or `Copier` to copy the JSON.
+3. Send the JSON report in the issue, chat, or debugging thread.
+
+You can append `?logs=1` to the production URL to open the diagnostics panel by
+default.
 
 The same report is available from DevTools with:
 
@@ -76,8 +79,8 @@ The same report is available from DevTools with:
 window.__NEON_DIAGNOSTICS__.exportText()
 ```
 
-Logs stay local to the device until someone copies the report; this static build
-does not upload telemetry to a server.
+Logs stay local to the device until someone shares or copies the report; this
+static build does not upload telemetry to a server.
 
 ## Architecture
 
