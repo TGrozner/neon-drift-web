@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { RaceState } from '../../shared/race'
 import type { TrackId } from '../../shared/track'
+import { MOBILE_VIEWPORT_QUERY, mobileViewportMatches } from './mobileViewport'
 import { shouldAdvanceTutorial, type TutorialStepId } from './tutorialProgress'
 
 type TutorialStep = {
@@ -11,12 +12,6 @@ type TutorialStep = {
 }
 
 const storageKey = 'neon_drift_web.tutorial.v1.complete'
-const mobileControlsQuery = '(max-width: 820px)'
-const mobileControlsMatch = (): boolean =>
-  typeof window !== 'undefined' &&
-  typeof window.matchMedia === 'function' &&
-  window.matchMedia(mobileControlsQuery).matches
-
 const tutorialComplete = (): boolean => {
   try {
     return window.localStorage.getItem(storageKey) === 'true'
@@ -159,7 +154,7 @@ export function Tutorial({ activeTrackId, race, raceVersion }: Props) {
   const initiallyComplete = useMemo(() => !trainingTrackActive && tutorialComplete(), [trainingTrackActive])
   const [index, setIndex] = useState(initiallyComplete ? steps.length : 0)
   const [acknowledged, setAcknowledged] = useState(false)
-  const [mobileControlsActive, setMobileControlsActive] = useState(mobileControlsMatch)
+  const [mobileControlsActive, setMobileControlsActive] = useState(mobileViewportMatches)
   const activeSteps = mobileControlsActive ? mobileSteps : steps
   const current = activeSteps[index]
   const visible =
@@ -174,7 +169,7 @@ export function Tutorial({ activeTrackId, race, raceVersion }: Props) {
 
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') return undefined
-    const media = window.matchMedia(mobileControlsQuery)
+    const media = window.matchMedia(MOBILE_VIEWPORT_QUERY)
     const update = () => setMobileControlsActive(media.matches)
     update()
     media.addEventListener('change', update)

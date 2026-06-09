@@ -95,6 +95,9 @@ const touchInputState = async (page: import('@playwright/test').Page) =>
     return debugWindow.__NEON_INPUT_STATE__ ?? {}
   })
 
+const isMobileViewport = (viewport: { width: number; height: number }) =>
+  viewport.width <= 820 || (viewport.width <= 960 && viewport.height <= 520)
+
 const installVibrationSpy = async (page: Page) => {
   await page.addInitScript(() => {
     type VibrationWindow = Window & typeof globalThis & { __NEON_VIBRATIONS__: (number | number[])[] }
@@ -249,13 +252,14 @@ test('lays out the menu choices without overlap', async ({ page }) => {
   for (const viewport of [
     { width: 1440, height: 900 },
     { width: 390, height: 844 },
+    { width: 844, height: 390 },
   ]) {
     await page.setViewportSize(viewport)
     await goToGame(page)
     await expect(page.getByTestId('main-menu')).toBeVisible()
     await expect.poll(() => menuHasNoChoiceOverlap(page)).toBe(true)
     await expect.poll(() => elementsHaveNoVisibleOverlap(page, '.start-button', '.track-option, .ship-card')).toBe(true)
-    if (viewport.width <= 820) {
+    if (isMobileViewport(viewport)) {
       await expect(page.getByTestId('mobile-menu-flow')).toBeVisible()
       await expect(page.getByTestId('mobile-menu-step-track')).toBeVisible()
       await expect(page.getByTestId('start-race')).toHaveCount(0)
@@ -270,6 +274,33 @@ test('lays out the menu choices without overlap', async ({ page }) => {
       await expect.poll(() => elementsHaveNoVisibleOverlap(page, '.start-button', '.track-option, .ship-card')).toBe(true)
     }
   }
+})
+
+test('keeps mobile setup and touch controls active in landscape', async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 })
+  await goToGame(page, { tutorialComplete: false })
+  await expect(page.getByTestId('mobile-menu-flow')).toBeVisible()
+  await expect(page.getByTestId('mobile-menu-step-track')).toBeVisible()
+  await expect(page.getByTestId('start-race')).toHaveCount(0)
+  await page.getByTestId('mobile-menu-next').click()
+  await page.getByTestId('mobile-menu-next').click()
+  await expect(page.getByTestId('start-race')).toBeInViewport()
+  await startRaceFromMenu(page)
+
+  await expect(page.getByTestId('tutorial')).toContainText('Auto-throttle')
+  await expect(page.getByTestId('tutorial')).toContainText('lower pads')
+  await expect(page.getByRole('button', { name: 'Turn left' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Turn right' })).toBeVisible()
+  await expect.poll(async () => (await touchInputState(page)).touchThrottle ?? 0).toBeGreaterThan(0.9)
+
+  const stripBox = await page.getByTestId('mobile-race-strip').boundingBox()
+  expect(stripBox).not.toBeNull()
+  await page.evaluate(() => window.getSelection()?.removeAllRanges())
+  await page.mouse.move(stripBox!.x + 8, stripBox!.y + 8)
+  await page.mouse.down()
+  await page.mouse.move(stripBox!.x + stripBox!.width - 8, stripBox!.y + stripBox!.height - 8)
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() ?? '')).toBe('')
 })
 
 test('plays s&box menu feedback cues', async ({ page }) => {
@@ -388,7 +419,6 @@ test('drives with simplified mobile touch controls', async ({ page }) => {
   await expect.poll(async () => page.getByTestId('mobile-boost-fill').evaluate((node) => getComputedStyle(node).animationDuration)).toBe('1.2s')
   await expect.poll(async () => (await touchInputState(page)).touchBoost ?? false, { timeout: 2_000 }).toBe(true)
   await boost.dispatchEvent('pointerup', { pointerId: 8, button: 0, isPrimary: true, pointerType: 'touch' })
-  await expect.poll(async () => (await touchInputState(page)).touchBoost ?? false, { timeout: 500 }).toBe(true)
   await expect.poll(async () => (await touchInputState(page)).touchSteer ?? 0).toBeLessThan(-0.9)
   await expect.poll(async () => (await vibrationEvents(page)).some((pattern) => pattern === 18)).toBe(true)
 

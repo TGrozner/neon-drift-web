@@ -3,6 +3,7 @@ import { SHIP_PROFILES, type ShipProfileId } from '../../shared/constants'
 import type { RaceState } from '../../shared/race'
 import { TRACKS, type TrackId } from '../../shared/track'
 import type { MenuAudioCue } from '../audio/neonAudio'
+import { MOBILE_VIEWPORT_QUERY, mobileViewportMatches } from './mobileViewport'
 
 type Props = {
   race: RaceState
@@ -14,7 +15,6 @@ type Props = {
   onStart: () => void
 }
 
-const MOBILE_MENU_QUERY = '(max-width: 820px)'
 const MOBILE_MENU_STEPS = ['track', 'ship', 'ready'] as const
 
 type MobileMenuStep = typeof MOBILE_MENU_STEPS[number]
@@ -27,11 +27,6 @@ const mobileMenuStepLabel: Record<MobileMenuStep, string> = {
 
 const mobileMenuStepIndex = (step: MobileMenuStep): number => MOBILE_MENU_STEPS.indexOf(step)
 
-const mobileMenuMatches = (): boolean =>
-  typeof window !== 'undefined' &&
-  typeof window.matchMedia === 'function' &&
-  window.matchMedia(MOBILE_MENU_QUERY).matches
-
 export function MenuPanel({
   race,
   selectedProfile,
@@ -41,12 +36,12 @@ export function MenuPanel({
   onMenuCue,
   onStart,
 }: Props) {
-  const [mobileMenu, setMobileMenu] = useState(mobileMenuMatches)
+  const [mobileMenu, setMobileMenu] = useState(mobileViewportMatches)
   const [mobileStep, setMobileStep] = useState<MobileMenuStep>('track')
 
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') return undefined
-    const media = window.matchMedia(MOBILE_MENU_QUERY)
+    const media = window.matchMedia(MOBILE_VIEWPORT_QUERY)
     const updateMobileMenu = () => setMobileMenu(media.matches)
     updateMobileMenu()
     media.addEventListener('change', updateMobileMenu)

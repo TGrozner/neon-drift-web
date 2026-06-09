@@ -1,9 +1,6 @@
-const mobileFeedbackQuery = '(max-width: 820px)'
+import { mobileViewportMatches } from './mobileViewport'
 
-export const mobileFeedbackActive = (): boolean =>
-  typeof window !== 'undefined' &&
-  typeof window.matchMedia === 'function' &&
-  window.matchMedia(mobileFeedbackQuery).matches
+export const mobileFeedbackActive = (): boolean => mobileViewportMatches()
 
 export const triggerMobileHaptic = (pattern: number | number[]): void => {
   if (!mobileFeedbackActive()) return

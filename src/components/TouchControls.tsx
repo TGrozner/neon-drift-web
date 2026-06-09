@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'react'
 import type { TouchCommand } from '../hooks/useNeonGame'
 import { triggerMobileHaptic } from './mobileFeedback'
+import { MOBILE_VIEWPORT_QUERY } from './mobileViewport'
 
 type DriveButtonCommand = Extract<TouchCommand, 'left' | 'right' | 'boost' | 'airbrake'>
 
@@ -11,7 +12,6 @@ type Props = {
   onReset: () => void
 }
 
-const MOBILE_CONTROLS_QUERY = '(max-width: 820px)'
 const MOBILE_BOOST_TAP_MS = 1200
 
 const clearDriveButtons = (onTouch: (command: TouchCommand, active: boolean) => void) => {
@@ -80,7 +80,7 @@ export function TouchControls({ airbrakeCharge, autoThrottle, onTouch, onReset }
       clearDriveButtons(onTouch)
       return undefined
     }
-    const media = window.matchMedia(MOBILE_CONTROLS_QUERY)
+    const media = window.matchMedia(MOBILE_VIEWPORT_QUERY)
     const updateThrottle = () => {
       const mobileDriving = autoThrottle && media.matches
       onTouch('throttle', mobileDriving)
