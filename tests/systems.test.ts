@@ -1018,6 +1018,28 @@ describe('browser integration helpers', () => {
     }
   })
 
+  it('shows the mobile airbrake charge floor while drift is held', () => {
+    const onTouch = vi.fn()
+    render(createElement(TouchControls, {
+      airbrakeCharge: 0,
+      autoThrottle: false,
+      onTouch,
+      onReset: vi.fn(),
+    }))
+
+    const drift = screen.getByRole('button', { name: 'Drift airbrake' })
+    const fill = screen.getByTestId('mobile-airbrake-fill')
+
+    fireEvent.pointerDown(drift, { pointerId: 2, button: 0, isPrimary: true, pointerType: 'touch' })
+    expect(drift.getAttribute('aria-pressed')).toBe('true')
+    expect(fill.style.minWidth).toBe('28%')
+    expect(Number.parseFloat(fill.style.width)).toBeCloseTo(28)
+
+    fireEvent.pointerUp(drift, { pointerId: 2, button: 0, isPrimary: true, pointerType: 'touch' })
+    expect(drift.getAttribute('aria-pressed')).toBe('false')
+    expect(fill.style.width).toBe('0%')
+  })
+
   it('renders tutorial UI when tutorial storage is unavailable', () => {
     const originalStorage = Object.getOwnPropertyDescriptor(window, 'localStorage')
     Object.defineProperty(window, 'localStorage', {

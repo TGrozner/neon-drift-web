@@ -428,9 +428,6 @@ test('drives with simplified mobile touch controls', async ({ page }) => {
   await expect.poll(async () => (await touchInputState(page)).touchAirbrake ?? false).toBe(true)
   await expect.poll(async () => (await touchInputState(page)).touchBoost ?? true).toBe(false)
   await expect.poll(async () => (await touchInputState(page)).touchSteer ?? 0).toBeLessThan(-0.9)
-  await expect.poll(async () => (
-    await page.getByTestId('mobile-airbrake-fill').evaluate((node) => (node as HTMLElement).style.minWidth)
-  ), { timeout: 2_000 }).toBe('28%')
   await drift.dispatchEvent('pointercancel', { pointerId: 10, button: 0, isPrimary: true, pointerType: 'touch' })
   await expect.poll(async () => (await vibrationEvents(page)).some((pattern) => pattern === 12)).toBe(true)
 
