@@ -10,6 +10,7 @@ import {
 } from '../../shared/race'
 import { clamp, finiteOr } from '../../shared/math'
 import type { TrackId } from '../../shared/track'
+import { neonDiagnostics } from '../diagnostics/neonDiagnostics'
 
 type KeyState = {
   throttle: number
@@ -62,6 +63,8 @@ const hasAny = (keys: Set<string>, values: string[]): boolean =>
 const STEER_LEFT = 1
 const STEER_RIGHT = -1
 const REACT_PUBLISH_INTERVAL_MS = 50
+const LARGE_FRAME_GAP_SECONDS = 0.2
+const LARGE_FRAME_GAP_LOG_COOLDOWN_MS = 5_000
 const clampInput = (value: number): number => clamp(value, -1, 1)
 
 const shouldPublishInputDebug = (): boolean =>
@@ -126,12 +129,17 @@ export const useNeonGame = () => {
   const accumulatorRef = useRef(0)
   const nextPublishTimeRef = useRef(0)
   const lastPublishedPhaseRef = useRef(view.race.phase)
+  const lastLargeFrameGapLogRef = useRef(0)
 
   useEffect(() => {
     const clearInputState = () => {
       pressedKeysRef.current.clear()
       touchRef.current = createTouchState()
       publishInputDebug(pressedKeysRef.current, touchRef.current)
+      neonDiagnostics.log('input', 'cleared', {
+        phase: raceRef.current.phase,
+        visibilityState: document.visibilityState,
+      })
     }
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') clearInputState()
@@ -174,6 +182,18 @@ export const useNeonGame = () => {
       lastTimeRef.current = time
       const elapsedSeconds = Math.max(0, finiteOr((time - last) / 1000))
       const frameDt = Math.min(MAX_ACCUMULATED_TIME, elapsedSeconds)
+      if (
+        elapsedSeconds >= LARGE_FRAME_GAP_SECONDS &&
+        time - lastLargeFrameGapLogRef.current >= LARGE_FRAME_GAP_LOG_COOLDOWN_MS
+      ) {
+        lastLargeFrameGapLogRef.current = time
+        neonDiagnostics.warn('simulation', 'large_frame_gap', {
+          elapsedMs: Math.round(elapsedSeconds * 1000),
+          appliedMs: Math.round(frameDt * 1000),
+          phase: raceRef.current.phase,
+          track: raceRef.current.track.id,
+        })
+      }
       accumulatorRef.current += frameDt
       let stepped = false
       while (accumulatorRef.current >= FIXED_DT) {
@@ -183,7 +203,16 @@ export const useNeonGame = () => {
         if (touchRef.current.reset) touchRef.current.reset = false
         stepped = true
       }
-      const phaseChanged = raceRef.current.phase !== lastPublishedPhaseRef.current
+      const previousPhase = lastPublishedPhaseRef.current
+      const phaseChanged = raceRef.current.phase !== previousPhase
+      if (phaseChanged) {
+        neonDiagnostics.log('race', 'phase_change', {
+          from: previousPhase,
+          to: raceRef.current.phase,
+          track: raceRef.current.track.id,
+          raceTime: Math.round(raceRef.current.raceTime * 10) / 10,
+        })
+      }
       if (stepped && (phaseChanged || time >= nextPublishTimeRef.current)) {
         lastPublishedPhaseRef.current = raceRef.current.phase
         nextPublishTimeRef.current = time + REACT_PUBLISH_INTERVAL_MS
@@ -199,6 +228,7 @@ export const useNeonGame = () => {
   }, [])
 
   const start = useCallback((profileId: ShipProfileId, trackId: TrackId) => {
+    neonDiagnostics.log('race', 'start_requested', { profileId, trackId })
     raceRef.current = startRace(profileId, trackId)
     lastPublishedPhaseRef.current = raceRef.current.phase
     nextPublishTimeRef.current = 0
@@ -218,10 +248,19 @@ export const useNeonGame = () => {
 
   const reset = useCallback(() => {
     touchRef.current.reset = true
+    neonDiagnostics.log('input', 'reset_requested', {
+      phase: raceRef.current.phase,
+      track: raceRef.current.track.id,
+    })
     publishInputDebug(pressedKeysRef.current, touchRef.current)
   }, [])
 
   const menu = useCallback(() => {
+    neonDiagnostics.log('race', 'menu_requested', {
+      phase: raceRef.current.phase,
+      track: raceRef.current.track.id,
+      raceTime: Math.round(raceRef.current.raceTime * 10) / 10,
+    })
     goToMenu(raceRef.current)
     lastPublishedPhaseRef.current = raceRef.current.phase
     nextPublishTimeRef.current = 0
