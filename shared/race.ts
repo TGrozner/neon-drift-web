@@ -359,7 +359,24 @@ const nearbyVehicleCount = (race: RaceState, vehicle: Vehicle): number =>
     return gap < 6.2 && Math.abs(other.lane - vehicle.lane) < 3.2
   }).length
 
+const applyPackLateralImpulse = (
+  vehicle: Vehicle,
+  delta: number,
+  impulseBudget: Map<string, number>,
+  maxDelta: number,
+): void => {
+  if (delta === 0 || maxDelta <= 0) return
+  const used = impulseBudget.get(vehicle.id) ?? 0
+  const available = Math.max(0, maxDelta - used)
+  if (available <= 0) return
+  const applied = Math.sign(delta) * Math.min(Math.abs(delta), available)
+  vehicle.lateralSpeed += applied
+  impulseBudget.set(vehicle.id, used + Math.abs(applied))
+}
+
 const applyPackInteractions = (race: RaceState, dt: number): void => {
+  const lateralImpulseBudget = new Map<string, number>()
+  const maxLateralDelta = PACK_CONTACT.maxLateralSpeedDeltaPerSecond * dt
   for (let i = 0; i < race.vehicles.length; i += 1) {
     const a = race.vehicles[i]
     if (!a || a.finished || a.crashOutLockRemaining > 0) continue
@@ -378,8 +395,8 @@ const applyPackInteractions = (race: RaceState, dt: number): void => {
       const laneDirection = Math.abs(lateral) > 0.0001 ? lateral / safeDistance : fallbackLaneDirection
       const alongDirection = Math.abs(along) > 0.0001 ? along / safeDistance : 0
       const repel = PACK_CONTACT.proximityRepelForce * proximity * dt
-      a.lateralSpeed -= laneDirection * repel
-      b.lateralSpeed += laneDirection * repel
+      applyPackLateralImpulse(a, -laneDirection * repel, lateralImpulseBudget, maxLateralDelta)
+      applyPackLateralImpulse(b, laneDirection * repel, lateralImpulseBudget, maxLateralDelta)
 
       const slowdown = Math.max(0.82, 1 - PACK_CONTACT.proximitySlowdown * proximity * dt)
       a.forwardSpeed *= slowdown
@@ -398,8 +415,8 @@ const applyPackInteractions = (race: RaceState, dt: number): void => {
       const rebound = PACK_CONTACT.bumpReboundForce * bump * (0.35 + strongestClosing)
       const bumpForce = (PACK_CONTACT.bumpForce + Math.max(aClosing, bClosing) * deflection) * bump + rebound
 
-      a.lateralSpeed -= laneDirection * bumpForce * dt
-      b.lateralSpeed += laneDirection * bumpForce * dt
+      applyPackLateralImpulse(a, -laneDirection * bumpForce * dt, lateralImpulseBudget, maxLateralDelta)
+      applyPackLateralImpulse(b, laneDirection * bumpForce * dt, lateralImpulseBudget, maxLateralDelta)
 
       if (aNoseContact > 0) {
         a.forwardSpeed *= Math.max(PACK_CONTACT.bumpMinRetention, 1 - PACK_CONTACT.bumpNoseSpeedLoss * bump * aNoseContact)

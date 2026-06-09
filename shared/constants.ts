@@ -208,6 +208,7 @@ export const PACK_CONTACT = {
   proximityRadius: distanceScaled(285),
   proximityRepelForce: scaled(720),
   proximitySlowdown: 0.055,
+  maxLateralSpeedDeltaPerSecond: scaled(3600),
   bumpRadius: distanceScaled(162),
   bumpForce: scaled(1320),
   bumpReboundForce: scaled(410),

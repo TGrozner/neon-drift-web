@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createElement } from 'react'
 import { cleanup, render, screen } from '@testing-library/react'
 import { createBotBrain, getBotInput } from '../shared/bot'
-import { FIXED_DT, RACE, SHIP_PROFILES, SLIPSTREAM } from '../shared/constants'
+import { FIXED_DT, PACK_CONTACT, RACE, SHIP_PROFILES, SLIPSTREAM } from '../shared/constants'
 import { clamp, cross3, distanceAlongForward, dot3, signedWrappedDelta, wrapDistance } from '../shared/math'
 import { EMPTY_INPUT, crashOut, createVehicle } from '../shared/physics'
 import { isInsidePad, triggerTrackPads } from '../shared/pads'
@@ -756,6 +756,26 @@ describe('race flow', () => {
     expect(player.packBumpPulse).toBeGreaterThan(0)
     expect(rival.packBumpPulse).toBeGreaterThan(0)
     expect(Math.abs(rival.lane - player.lane)).toBeGreaterThan(0)
+  })
+
+  it('caps one-frame lateral shove in dense pack pileups', () => {
+    const race = startRace('balanced')
+    race.phase = 'racing'
+    race.raceTime = 5
+    const packedVehicles = race.vehicles.slice(0, 5)
+    for (const [index, vehicle] of packedVehicles.entries()) {
+      vehicle.distance = 50 + index * 0.04
+      vehicle.lane = 0
+      vehicle.forwardSpeed = index === 0 ? 62 : 24
+      vehicle.lateralSpeed = 0
+      vehicle.packBumpPulse = 0
+    }
+
+    updateRace(race, EMPTY_INPUT, 1 / 60)
+
+    const maxLateralSpeed = Math.max(...packedVehicles.map((vehicle) => Math.abs(vehicle.lateralSpeed)))
+    expect(maxLateralSpeed).toBeLessThanOrEqual(PACK_CONTACT.maxLateralSpeedDeltaPerSecond * (1 / 60) + 0.35)
+    expect(packedVehicles.some((vehicle) => vehicle.packBumpPulse > 0)).toBe(true)
   })
 
   it('ranks first-lap vehicles by start-line progress after distance wrap', () => {

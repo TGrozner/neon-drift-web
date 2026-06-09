@@ -102,7 +102,7 @@ const applyPackBehavior = (
   let desiredLaneBias = 0
   let draft = 0
   let brake = 0
-  const packSenseDistance = clamp(46 + Math.abs(vehicle.forwardSpeed) * 0.22, 52, 74)
+  const packSenseDistance = clamp(50 + Math.abs(vehicle.forwardSpeed) * 0.24, 56, 82)
   const sideSenseDistance = 34
   const laneSpacing = 2.55
 
@@ -120,12 +120,12 @@ const applyPackBehavior = (
       const closingSpeed = vehicle.forwardSpeed - other.forwardSpeed
       const sameLaneRisk = saturate(1 - lateralDistance / laneSpacing)
       const timeToContact = closingSpeed > 0 ? gap / Math.max(0.001, closingSpeed) : Number.POSITIVE_INFINITY
-      const closingUrgency = Number.isFinite(timeToContact) ? saturate((1.15 - timeToContact) / 1.15) : 0
-      const emergencyOverlap = gap < 5.4 ? saturate(1 - gap / 5.4) : 0
+      const closingUrgency = Number.isFinite(timeToContact) ? saturate((1.35 - timeToContact) / 1.35) : 0
+      const emergencyOverlap = gap < 6.2 ? saturate(1 - gap / 6.2) : 0
       const closingRatio = saturate(closingSpeed / Math.max(1, profile.maxSpeed * 0.38))
       brake = Math.max(
         brake,
-        sameLaneRisk * Math.max(closingUrgency, closingRatio * closeness * 0.9, emergencyOverlap * 0.75),
+        sameLaneRisk * Math.max(closingUrgency, closingRatio * closeness * 0.9, emergencyOverlap * 0.88),
       )
     }
     if (Math.abs(gap) <= sideSenseDistance && lateralDistance < laneSpacing) {
@@ -198,7 +198,7 @@ export const getBotInput = (
     !wantsAirbrake &&
     (brain.wantsPad || brain.draftIntent > 0.16 || clean.intent > 0.34 || vehicle.power > 0.52)
   const wantsBoost = usefulBoost && vehicle.power > profile.boostActivationThreshold
-  const throttle = clamp(1 - brake * 0.42 - (wantsAirbrake ? 0.05 : 0), 0.25, 1)
+  const throttle = clamp(1 - brake * 0.48 - (wantsAirbrake ? 0.05 : 0), 0.25, 1)
 
   return {
     throttle,
