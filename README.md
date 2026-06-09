@@ -57,6 +57,28 @@ The deploy job runs from `main` when the repository is public, or when the
 repository variable `ENABLE_GITHUB_PAGES_DEPLOY` is set to `true` after GitHub
 Pages is available for this repository.
 
+## Mobile diagnostics
+
+The browser keeps a persistent local diagnostics ring buffer in `localStorage`.
+It records session/device info, lifecycle events, race starts/phase changes,
+large simulation frame gaps, renderer frame summaries, slow frames, and runtime
+errors or unhandled promise rejections.
+
+To get a report from a phone after someone says it lagged:
+
+1. Open the production URL with `?logs=1` appended.
+2. Tap `Copier` in the diagnostics panel.
+3. Paste the JSON report into the issue, chat, or debugging thread.
+
+The same report is available from DevTools with:
+
+```js
+window.__NEON_DIAGNOSTICS__.exportText()
+```
+
+Logs stay local to the device until someone copies the report; this static build
+does not upload telemetry to a server.
+
 ## Architecture
 
 - `shared/`: deterministic gameplay modules usable by client/server style code.
