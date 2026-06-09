@@ -580,8 +580,8 @@ test('starts a playable 3D race and renders canvas pixels', async ({ page }) => 
     gateParts: 24,
     pads: 8,
     startLine: 1,
-    slabs: 384,
-    rails: 768,
+    slabs: 1536,
+    rails: 3072,
   })
 })
 
@@ -609,8 +609,8 @@ test('starts a playable source-authored stunt track', async ({ page }) => {
     }
   }), { timeout: 15_000 }).toEqual({
     loaded: true,
-    slabs: 640,
-    rails: 1280,
+    slabs: 2560,
+    rails: 5120,
   })
   await releaseThrottle(page)
 })

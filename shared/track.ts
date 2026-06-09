@@ -84,6 +84,7 @@ type TrackSample = TrackProfile
 const WORLD_SCALE = 0.01
 const SOURCE_MIN_TRACK_WIDTH = 900
 const SOURCE_SPEED_PAD_LENGTH = 310
+export const TRACK_GEOMETRY_SMOOTHING = 4
 const up: Vec3 = { x: 0, y: 1, z: 0 }
 const gateCount = 8
 
@@ -179,14 +180,17 @@ const sampleSourceNode = (spec: SourceTrackSpec, index: number, t: number): Omit
   }
 }
 
-const bakeTrackSamples = (spec: SourceTrackSpec): { samples: TrackSample[]; totalLength: number } => {
+const bakeTrackSamples = (
+  spec: SourceTrackSpec,
+  subdivisions = spec.subdivisions,
+): { samples: TrackSample[]; totalLength: number } => {
   const samples: TrackSample[] = []
   let distance = 0
   let previous: TrackSample | null = null
 
   for (let index = 0; index < spec.nodes.length; index += 1) {
-    for (let step = 0; step < spec.subdivisions; step += 1) {
-      const t = step / spec.subdivisions
+    for (let step = 0; step < subdivisions; step += 1) {
+      const t = step / subdivisions
       const sample = sampleSourceNode(spec, index, t)
       if (previous) distance += distance3(sample.center, previous.center)
       const baked = { ...sample, distance }
@@ -201,38 +205,21 @@ const bakeTrackSamples = (spec: SourceTrackSpec): { samples: TrackSample[]; tota
   return { samples, totalLength }
 }
 
-const makeVisualSegments = (samples: TrackSample[], totalLength: number, allowInvertedFrame: boolean): TrackVisualSegment[] =>
-  samples.map((a, index) => {
-    const b = samples[(index + 1) % samples.length]
-    const length = index === samples.length - 1
-      ? Math.max(0.0001, totalLength - a.distance)
-      : Math.max(0.0001, b.distance - a.distance)
-    const tangent = normalize3(sub3(b.center, a.center), normalize3(a.tangent, { x: 1, y: 0, z: 0 }))
-    const averagedRight = add3(a.right, b.right)
-    const projectedRight = sub3(averagedRight, scale3(tangent, dot3(averagedRight, tangent)))
-    let right = normalize3(projectedRight, normalize3(a.right, { x: 0, y: 0, z: -1 }))
-    const averageUp = normalize3(add3(a.up, b.up), normalize3(a.up, up))
-    let segmentUp = normalize3(cross3(tangent, right), averageUp)
-
-    if (!allowInvertedFrame && segmentUp.y < 0) {
-      segmentUp = scale3(segmentUp, -1)
-      right = scale3(right, -1)
-    }
-
-    right = normalize3(cross3(segmentUp, tangent), right)
-    segmentUp = normalize3(cross3(tangent, right), segmentUp)
-
+const makeSmoothVisualSegments = (
+  samples: TrackSample[],
+  totalLength: number,
+  segmentCount: number,
+  allowInvertedFrame: boolean,
+): TrackVisualSegment[] => {
+  const segmentLength = totalLength / Math.max(1, segmentCount)
+  return Array.from({ length: segmentCount }, (_, index) => {
+    const distance = index * segmentLength + segmentLength * 0.5
     return {
-      center: lerp3(a.center, b.center, 0.5),
-      tangent,
-      right,
-      up: segmentUp,
-      width: (a.width + b.width) * 0.5,
-      distance: wrapDistance(a.distance + length * 0.5, totalLength),
-      bankDegrees: (a.bankDegrees + b.bankDegrees) * 0.5,
-      length,
+      ...interpolateSample(samples, totalLength, distance, allowInvertedFrame),
+      length: segmentLength,
     }
   })
+}
 
 const interpolateSample = (
   samples: TrackSample[],
@@ -387,8 +374,12 @@ const makePads = (track: RaceTrack): TrackPad[] => {
 }
 
 const makeSourceTrack = (spec: SourceTrackSpec): RaceTrack => {
-  const { samples, totalLength } = bakeTrackSamples(spec)
-  const averageWidth = samples.reduce((sum, sample) => sum + sample.width, 0) / Math.max(1, samples.length)
+  const visualSegmentCount = spec.nodes.length * spec.subdivisions
+  const { samples: runtimeSamples, totalLength } = bakeTrackSamples(
+    spec,
+    spec.subdivisions * TRACK_GEOMETRY_SMOOTHING,
+  )
+  const averageWidth = runtimeSamples.reduce((sum, sample) => sum + sample.width, 0) / Math.max(1, runtimeSamples.length)
   const track: RaceTrack = {
     id: spec.id,
     name: spec.name,
@@ -398,8 +389,13 @@ const makeSourceTrack = (spec: SourceTrackSpec): RaceTrack => {
     gates: [],
     pads: [],
     startGrid: makeStartGrid(spec.id),
-    visualSegments: makeVisualSegments(samples, totalLength, spec.allowInvertedFrame),
-    sample: (distance: number) => interpolateSample(samples, totalLength, distance, spec.allowInvertedFrame),
+    visualSegments: makeSmoothVisualSegments(
+      runtimeSamples,
+      totalLength,
+      visualSegmentCount * TRACK_GEOMETRY_SMOOTHING,
+      spec.allowInvertedFrame,
+    ),
+    sample: (distance: number) => interpolateSample(runtimeSamples, totalLength, distance, spec.allowInvertedFrame),
   }
   track.gates = makeGates(track)
   track.pads = makePads(track)

@@ -14,7 +14,7 @@ import {
   sampleSlipstream,
   slipstreamSegmentInfluence,
 } from '../shared/slipstream'
-import { ALL_TRACKS, TUTORIAL_CIRCUIT, TRACKS, trackToWorld } from '../shared/track'
+import { ALL_TRACKS, TRACK_GEOMETRY_SMOOTHING, TUTORIAL_CIRCUIT, TRACKS, trackToWorld } from '../shared/track'
 import { travelYawForVehicle, visualYawForVehicle } from '../shared/vehicleVisuals'
 import { NeonAudioEngine } from '../src/audio/neonAudio'
 import { RaceOverlay } from '../src/components/RaceOverlay'
@@ -68,7 +68,9 @@ describe('track and pads', () => {
       expect(track.totalLength).toBeGreaterThan(100)
       expect(track.gates).toHaveLength(8)
       expect(track.startGrid).toHaveLength(8)
-      expect(track.visualSegments).toHaveLength((sourceSpec?.nodes.length ?? 0) * (sourceSpec?.subdivisions ?? 0))
+      expect(track.visualSegments).toHaveLength(
+        (sourceSpec?.nodes.length ?? 0) * (sourceSpec?.subdivisions ?? 0) * TRACK_GEOMETRY_SMOOTHING,
+      )
       expect('skylineTowers' in track).toBe(false)
       for (let i = 0; i < 12; i += 1) {
         const profile = track.sample((track.totalLength * i) / 12)
@@ -144,6 +146,9 @@ describe('track and pads', () => {
       let maxTangentDelta = 0
       let maxBankDelta = 0
       let maxFrameDot = 0
+      let maxVisualSegmentLength = 0
+      let maxVisualTangentDelta = 0
+      let maxVisualRightDelta = 0
       let previous = track.sample(0)
       const samples = 720
       for (let i = 1; i <= samples; i += 1) {
@@ -158,6 +163,13 @@ describe('track and pads', () => {
         )
         previous = profile
       }
+      for (let i = 0; i < track.visualSegments.length; i += 1) {
+        const current = track.visualSegments[i]
+        const next = track.visualSegments[(i + 1) % track.visualSegments.length]
+        maxVisualSegmentLength = Math.max(maxVisualSegmentLength, current.length)
+        maxVisualTangentDelta = Math.max(maxVisualTangentDelta, angleBetweenDegrees(current.tangent, next.tangent))
+        maxVisualRightDelta = Math.max(maxVisualRightDelta, angleBetweenDegrees(current.right, next.right))
+      }
 
       const start = track.sample(0)
       const ahead = track.sample(Math.min(18, track.totalLength * 0.04))
@@ -165,6 +177,9 @@ describe('track and pads', () => {
       expect(maxTangentDelta, `${track.id} tangent delta`).toBeLessThan(12)
       expect(maxBankDelta, `${track.id} bank delta`).toBeLessThan(5)
       expect(maxFrameDot, `${track.id} frame orthogonality`).toBeLessThan(0.01)
+      expect(maxVisualSegmentLength, `${track.id} visual segment length`).toBeLessThan(8.8)
+      expect(maxVisualTangentDelta, `${track.id} visual tangent delta`).toBeLessThan(8)
+      expect(maxVisualRightDelta, `${track.id} visual right delta`).toBeLessThan(9)
       expect(angleBetweenDegrees(start.tangent, ahead.tangent), `${track.id} launch straight ahead`).toBeLessThan(8)
       expect(angleBetweenDegrees(start.tangent, behind.tangent), `${track.id} launch straight behind`).toBeLessThan(8)
       expect(Math.abs(start.bankDegrees), `${track.id} launch bank`).toBeLessThan(1)
