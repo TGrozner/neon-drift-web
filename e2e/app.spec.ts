@@ -380,12 +380,12 @@ test('drives with simplified mobile touch controls', async ({ page }) => {
 
   const boost = page.getByRole('button', { name: 'Boost' })
   await boost.dispatchEvent('pointerdown', { pointerId: 8, button: 0, isPrimary: true, pointerType: 'touch' })
-  await expect(boost).toHaveAttribute('aria-pressed', 'true')
-  await expect(boost.locator('.boost-fill')).toBeVisible()
-  await expect.poll(async () => (await touchInputState(page)).touchBoost ?? false).toBe(true)
-  await expect.poll(async () => (await touchInputState(page)).touchSteer ?? 0).toBeLessThan(-0.9)
+  await expect(boost).toHaveAttribute('aria-pressed', 'true', { timeout: 500 })
+  await expect(boost.locator('.boost-fill')).toBeVisible({ timeout: 500 })
+  await expect.poll(async () => (await touchInputState(page)).touchBoost ?? false, { timeout: 500 }).toBe(true)
   await boost.dispatchEvent('pointerup', { pointerId: 8, button: 0, isPrimary: true, pointerType: 'touch' })
-  await expect.poll(async () => (await touchInputState(page)).touchBoost ?? false).toBe(true)
+  expect((await touchInputState(page)).touchBoost ?? false).toBe(true)
+  await expect.poll(async () => (await touchInputState(page)).touchSteer ?? 0).toBeLessThan(-0.9)
   await expect.poll(async () => (await vibrationEvents(page)).some((pattern) => pattern === 18)).toBe(true)
 
   const drift = page.getByRole('button', { name: 'Drift airbrake' })
