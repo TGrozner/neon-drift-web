@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { installNeonDiagnostics, NEON_DIAGNOSTICS_STORAGE_KEY, neonDiagnostics } from '../src/diagnostics/neonDiagnostics'
+import {
+  installNeonDiagnostics,
+  NEON_DIAGNOSTICS_STORAGE_KEY,
+  neonDiagnostics,
+  summarizeRenderStats,
+} from '../src/diagnostics/neonDiagnostics'
 
 describe('neon diagnostics', () => {
   beforeEach(() => {
@@ -22,8 +27,16 @@ describe('neon diagnostics', () => {
   })
 
   it('summarizes renderer stats for compact frame diagnostics', () => {
-    const summary = neonDiagnostics.exportReport().summary
-    expect(summary.maxEntries).toBeGreaterThan(100)
-    expect(summary.storageAvailable).toBe(true)
+    const summary = summarizeRenderStats({
+      calls: 12,
+      triangles: 12345,
+      sourceTrackKitLoaded: true,
+      ignoredNested: { tooMuch: true },
+    })
+
+    expect(summary.calls).toBe(12)
+    expect(summary.triangles).toBe(12345)
+    expect(summary.sourceTrackKitLoaded).toBe(true)
+    expect(summary.ignoredNested).toBeUndefined()
   })
 })
