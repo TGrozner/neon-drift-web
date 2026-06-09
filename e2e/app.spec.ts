@@ -82,6 +82,19 @@ const pressedKeyCount = async (page: import('@playwright/test').Page) =>
     return debugWindow.__NEON_INPUT_STATE__?.pressedKeyCount ?? 0
   })
 
+const touchInputState = async (page: import('@playwright/test').Page) =>
+  page.evaluate(() => {
+    const debugWindow = window as Window & typeof globalThis & {
+      __NEON_INPUT_STATE__?: {
+        touchThrottle?: number
+        touchSteer?: number
+        touchBoost?: boolean
+        touchAirbrake?: boolean
+      }
+    }
+    return debugWindow.__NEON_INPUT_STATE__ ?? {}
+  })
+
 const goToGame = async (page: Page, { tutorialComplete = true } = {}) => {
   if (tutorialComplete) {
     await page.addInitScript((key) => localStorage.setItem(key, 'true'), tutorialStorageKey)
@@ -91,6 +104,14 @@ const goToGame = async (page: Page, { tutorialComplete = true } = {}) => {
 
 const focusRace = async (page: Page) => {
   await page.locator('canvas.game-canvas').click({ force: true, position: { x: 16, y: 16 } })
+}
+
+const startRaceFromMenu = async (page: Page) => {
+  const next = page.getByTestId('mobile-menu-next')
+  for (let step = 0; step < 2 && await next.isVisible(); step += 1) {
+    await next.click()
+  }
+  await page.getByTestId('start-race').click()
 }
 
 const holdThrottle = async (page: Page) => {
@@ -211,10 +232,17 @@ test('lays out the menu choices without overlap', async ({ page }) => {
     await expect.poll(() => menuHasNoChoiceOverlap(page)).toBe(true)
     await expect.poll(() => elementsHaveNoVisibleOverlap(page, '.start-button', '.track-option, .ship-card')).toBe(true)
     if (viewport.width <= 820) {
+      await expect(page.getByTestId('mobile-menu-flow')).toBeVisible()
+      await expect(page.getByTestId('mobile-menu-step-track')).toBeVisible()
+      await expect(page.getByTestId('start-race')).toHaveCount(0)
+      await page.getByTestId('mobile-menu-next').click()
+      await expect(page.getByTestId('mobile-menu-step-ship')).toBeVisible()
+      await page.getByTestId('mobile-menu-next').click()
+      await expect(page.getByTestId('mobile-menu-step-ready')).toBeVisible()
       await expect(page.getByTestId('start-race')).toBeInViewport()
-      await page.locator('.menu-panel').evaluate((element) => {
-        element.scrollTop = element.scrollHeight
-      })
+      await expect.poll(async () => page.locator('.menu-panel').evaluate((element) =>
+        element.scrollHeight <= element.clientHeight + 4,
+      )).toBe(true)
       await expect.poll(() => elementsHaveNoVisibleOverlap(page, '.start-button', '.track-option, .ship-card')).toBe(true)
     }
   }
@@ -259,7 +287,7 @@ test('replays the tutorial on the dedicated tutorial circuit', async ({ page }) 
   await expect(page.locator('.track-option.selected .track-tag')).toContainText('Training')
   await expect(page.getByTestId('tutorial')).toContainText('Pick a session')
   await expect(page.getByTestId('tutorial')).toContainText('1/9')
-  await page.getByTestId('start-race').click()
+  await startRaceFromMenu(page)
   await expect(page.getByTestId('tutorial')).toContainText('Launch clean')
   await expect(page.getByTestId('tutorial')).toContainText('2/9')
   await focusRace(page)
@@ -275,7 +303,7 @@ test('replays the tutorial on the dedicated tutorial circuit', async ({ page }) 
 test('keeps the mobile event strip clear of the airbrake charge meter', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await goToGame(page)
-  await page.getByTestId('start-race').click()
+  await startRaceFromMenu(page)
   await focusRace(page)
   await holdThrottle(page)
   await page.keyboard.down('Shift')
@@ -294,26 +322,39 @@ test('keeps the mobile event strip clear of the airbrake charge meter', async ({
 test('drives with simplified mobile touch controls', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await goToGame(page)
-  await page.getByTestId('start-race').click()
+  await startRaceFromMenu(page)
   await expect(page.getByTestId('tutorial')).toBeHidden()
 
-  const steering = page.getByLabel('Steering pad')
-  await expect(steering).toBeVisible()
+  const turnLeft = page.getByRole('button', { name: 'Turn left' })
+  const turnRight = page.getByRole('button', { name: 'Turn right' })
+  await expect(turnLeft).toBeVisible()
+  await expect(turnRight).toBeVisible()
   await expect(page.getByRole('button', { name: 'Boost' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Drift airbrake' })).toBeVisible()
 
   await page.waitForTimeout(4200)
   await expect.poll(() => hudSpeed(page)).toBeGreaterThan(0)
+  await expect.poll(async () => (await touchInputState(page)).touchThrottle ?? 0).toBeGreaterThan(0.9)
 
-  const steeringBox = await steering.boundingBox()
-  expect(steeringBox).not.toBeNull()
-  await page.mouse.move(steeringBox!.x + steeringBox!.width * 0.86, steeringBox!.y + steeringBox!.height * 0.5)
-  await page.mouse.down()
-  await expect.poll(async () => Number(await steering.getAttribute('aria-valuenow'))).toBeLessThan(-45)
-  await page.mouse.move(steeringBox!.x + steeringBox!.width * 0.14, steeringBox!.y + steeringBox!.height * 0.5)
-  await expect.poll(async () => Number(await steering.getAttribute('aria-valuenow'))).toBeGreaterThan(45)
-  await page.mouse.up()
-  await expect(steering).toHaveAttribute('aria-valuenow', '0')
+  await turnRight.dispatchEvent('pointerdown', { pointerId: 7, button: 0, isPrimary: true, pointerType: 'touch' })
+  await expect(turnRight).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(async () => (await touchInputState(page)).touchSteer ?? 0).toBeLessThan(-0.9)
+
+  const boost = page.getByRole('button', { name: 'Boost' })
+  await boost.dispatchEvent('pointerdown', { pointerId: 8, button: 0, isPrimary: true, pointerType: 'touch' })
+  await expect(boost).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(async () => (await touchInputState(page)).touchBoost ?? false).toBe(true)
+  await expect.poll(async () => (await touchInputState(page)).touchSteer ?? 0).toBeLessThan(-0.9)
+  await boost.dispatchEvent('pointercancel', { pointerId: 8, button: 0, isPrimary: true, pointerType: 'touch' })
+
+  await turnRight.dispatchEvent('pointercancel', { pointerId: 7, button: 0, isPrimary: true, pointerType: 'touch' })
+  await expect(turnRight).toHaveAttribute('aria-pressed', 'false')
+  await expect.poll(async () => (await touchInputState(page)).touchSteer ?? 0).toBe(0)
+
+  await turnLeft.dispatchEvent('pointerdown', { pointerId: 9, button: 0, isPrimary: true, pointerType: 'touch' })
+  await expect(turnLeft).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(async () => (await touchInputState(page)).touchSteer ?? 0).toBeGreaterThan(0.9)
+  await turnLeft.dispatchEvent('pointercancel', { pointerId: 9, button: 0, isPrimary: true, pointerType: 'touch' })
 
   const drift = page.getByRole('button', { name: 'Drift airbrake' })
   await drift.dispatchEvent('pointerdown', { pointerId: 8, button: 0, isPrimary: true, pointerType: 'touch' })
@@ -324,7 +365,7 @@ test('drives with simplified mobile touch controls', async ({ page }) => {
 
 test('clears held keyboard controls when the page loses focus', async ({ page }) => {
   await goToGame(page)
-  await page.getByTestId('start-race').click()
+  await startRaceFromMenu(page)
   await focusRace(page)
   await page.keyboard.down('z')
 
@@ -347,7 +388,7 @@ test('starts a playable 3D race and renders canvas pixels', async ({ page }) => 
   await expect.poll(() => menuHasNoChoiceOverlap(page)).toBe(true)
   await expect.poll(() => canvasHasNonBlankPixels(page)).toBe(true)
 
-  await page.getByTestId('start-race').click()
+  await startRaceFromMenu(page)
   await focusRace(page)
   await expect(page.getByTestId('race-toast')).toBeVisible()
   await holdThrottle(page)
@@ -464,7 +505,7 @@ test('starts a playable source-authored stunt track', async ({ page }) => {
   await goToGame(page)
   await page.getByRole('button', { name: /Inversion Ribbon/ }).click()
   await expect(page.locator('.menu-meta')).toContainText('Inversion Ribbon')
-  await page.getByTestId('start-race').click()
+  await startRaceFromMenu(page)
   await focusRace(page)
   await holdThrottle(page)
   await expectMoving(page)
@@ -493,7 +534,7 @@ test('starts a playable source-authored stunt track', async ({ page }) => {
 test('keeps race audio synchronized with live race state', async ({ page }) => {
   await installAudioSpy(page)
   await goToGame(page)
-  await page.getByTestId('start-race').click()
+  await startRaceFromMenu(page)
   await focusRace(page)
   await holdThrottle(page)
   await page.keyboard.down('Shift')

@@ -85,18 +85,16 @@ export const applyTouchCommand = (
   command: TouchCommand,
   active: boolean,
 ): void => {
-  if (command === 'left') touch.left = active
-  if (command === 'right') touch.right = active
+  if (command === 'left' || command === 'right') {
+    if (command === 'left') touch.left = active
+    if (command === 'right') touch.right = active
+    touch.steer = (touch.left ? STEER_LEFT : 0) + (touch.right ? STEER_RIGHT : 0)
+    return
+  }
+
   if (command === 'throttle') touch.throttle = active ? 1 : 0
   if (command === 'boost') touch.boost = active
   if (command === 'airbrake') touch.airbrake = active
-  touch.steer = (touch.left ? STEER_LEFT : 0) + (touch.right ? STEER_RIGHT : 0)
-}
-
-export const applyTouchSteer = (touch: TouchState, steer: number): void => {
-  touch.left = false
-  touch.right = false
-  touch.steer = clampInput(finiteOr(steer))
 }
 
 const keyInput = (keys: Set<string>): KeyState => ({
@@ -218,11 +216,6 @@ export const useNeonGame = () => {
     publishInputDebug(pressedKeysRef.current, touchRef.current)
   }, [])
 
-  const setTouchSteer = useCallback((steer: number) => {
-    applyTouchSteer(touchRef.current, steer)
-    publishInputDebug(pressedKeysRef.current, touchRef.current)
-  }, [])
-
   const reset = useCallback(() => {
     touchRef.current.reset = true
     publishInputDebug(pressedKeysRef.current, touchRef.current)
@@ -247,7 +240,6 @@ export const useNeonGame = () => {
     start,
     menu,
     setTouch,
-    setTouchSteer,
     reset,
     version: view.version,
   }

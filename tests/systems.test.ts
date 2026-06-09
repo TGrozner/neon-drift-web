@@ -19,14 +19,8 @@ import { NeonAudioEngine } from '../src/audio/neonAudio'
 import { Tutorial } from '../src/components/Tutorial'
 import { draftMeterRatio } from '../src/components/draftSignals'
 import { standingsForHud } from '../src/components/hudRows'
-import {
-  TOUCH_STEER_MAX,
-  TOUCH_THUMB_TRAVEL,
-  touchSteerFromCenteredRatio,
-  touchThumbOffset,
-} from '../src/components/touchControlMath'
 import { shouldAdvanceTutorial } from '../src/components/tutorialProgress'
-import { applyTouchCommand, applyTouchSteer, createTouchState } from '../src/hooks/useNeonGame'
+import { applyTouchCommand, createTouchState } from '../src/hooks/useNeonGame'
 import { VISUAL_LIGHTING, createRenderBasis } from '../src/render/renderer'
 
 const angleBetweenDegrees = (
@@ -842,40 +836,26 @@ describe('browser integration helpers', () => {
     expect(touch.steer).toBe(1)
   })
 
-  it('applies analog mobile touch steering without sticky left/right state', () => {
+  it('keeps mobile direction held while auto throttle and actions change', () => {
     const touch = createTouchState()
 
-    applyTouchSteer(touch, -0.62)
-    expect(touch.steer).toBeCloseTo(-0.62)
-    expect(touch.left).toBe(false)
-    expect(touch.right).toBe(false)
+    applyTouchCommand(touch, 'right', true)
+    applyTouchCommand(touch, 'boost', true)
+    applyTouchCommand(touch, 'airbrake', true)
+    applyTouchCommand(touch, 'throttle', true)
 
-    applyTouchCommand(touch, 'left', true)
-    expect(touch.steer).toBe(1)
-    applyTouchSteer(touch, 0)
+    expect(touch.steer).toBe(-1)
+    expect(touch.boost).toBe(true)
+    expect(touch.airbrake).toBe(true)
+    expect(touch.throttle).toBe(1)
+
+    applyTouchCommand(touch, 'boost', false)
+    applyTouchCommand(touch, 'airbrake', false)
+
+    expect(touch.steer).toBe(-1)
+
+    applyTouchCommand(touch, 'right', false)
     expect(touch.steer).toBe(0)
-    expect(touch.left).toBe(false)
-    expect(touch.right).toBe(false)
-  })
-
-  it('neutralizes invalid analog touch steering input', () => {
-    const touch = createTouchState()
-
-    applyTouchSteer(touch, Number.NaN)
-
-    expect(touch.steer).toBe(0)
-    expect(touch.left).toBe(false)
-    expect(touch.right).toBe(false)
-  })
-
-  it('maps mobile steer gestures through a forgiving bounded curve', () => {
-    expect(touchSteerFromCenteredRatio(0)).toBe(0)
-    expect(touchSteerFromCenteredRatio(0.05)).toBe(0)
-    expect(touchSteerFromCenteredRatio(Number.NaN)).toBe(0)
-    expect(touchSteerFromCenteredRatio(1)).toBeCloseTo(-TOUCH_STEER_MAX)
-    expect(touchSteerFromCenteredRatio(-1)).toBeCloseTo(TOUCH_STEER_MAX)
-    expect(Math.abs(touchSteerFromCenteredRatio(0.45))).toBeLessThan(0.35)
-    expect(touchThumbOffset(TOUCH_STEER_MAX)).toBeCloseTo(-TOUCH_STEER_MAX * TOUCH_THUMB_TRAVEL)
   })
 
   it('renders tutorial UI when tutorial storage is unavailable', () => {
