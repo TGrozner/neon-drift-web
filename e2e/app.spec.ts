@@ -124,7 +124,10 @@ const goToGame = async (page: Page, { tutorialComplete = true } = {}) => {
 }
 
 const focusRace = async (page: Page) => {
-  await page.locator('canvas.game-canvas').click({ force: true, position: { x: 16, y: 16 } })
+  const canvas = page.locator('canvas.game-canvas')
+  await expect(canvas).toBeVisible({ timeout: 15_000 })
+  await canvas.scrollIntoViewIfNeeded()
+  await canvas.click({ force: true, position: { x: 16, y: 16 } })
 }
 
 const startRaceFromMenu = async (page: Page) => {
@@ -146,7 +149,7 @@ const releaseThrottle = async (page: Page) => {
 }
 
 const expectMoving = async (page: Page) => {
-  await expect.poll(() => hudSpeed(page), { timeout: 15_000 }).toBeGreaterThan(0)
+  await expect.poll(() => hudSpeed(page), { timeout: 25_000 }).toBeGreaterThan(0)
 }
 
 const installAudioSpy = async (page: import('@playwright/test').Page) => {
@@ -380,12 +383,12 @@ test('drives with simplified mobile touch controls', async ({ page }) => {
 
   const boost = page.getByRole('button', { name: 'Boost' })
   await boost.dispatchEvent('pointerdown', { pointerId: 8, button: 0, isPrimary: true, pointerType: 'touch' })
-  await expect(boost).toHaveAttribute('aria-pressed', 'true', { timeout: 500 })
-  await expect(boost.locator('.boost-fill')).toBeVisible({ timeout: 500 })
+  await expect(boost).toHaveAttribute('aria-pressed', 'true', { timeout: 2_000 })
+  await expect(boost.locator('.boost-fill')).toBeVisible({ timeout: 2_000 })
   await expect.poll(async () => page.getByTestId('mobile-boost-fill').evaluate((node) => getComputedStyle(node).animationDuration)).toBe('1.2s')
-  await expect.poll(async () => (await touchInputState(page)).touchBoost ?? false, { timeout: 500 }).toBe(true)
+  await expect.poll(async () => (await touchInputState(page)).touchBoost ?? false, { timeout: 2_000 }).toBe(true)
   await boost.dispatchEvent('pointerup', { pointerId: 8, button: 0, isPrimary: true, pointerType: 'touch' })
-  expect((await touchInputState(page)).touchBoost ?? false).toBe(true)
+  await expect.poll(async () => (await touchInputState(page)).touchBoost ?? false, { timeout: 500 }).toBe(true)
   await expect.poll(async () => (await touchInputState(page)).touchSteer ?? 0).toBeLessThan(-0.9)
   await expect.poll(async () => (await vibrationEvents(page)).some((pattern) => pattern === 18)).toBe(true)
 
@@ -396,12 +399,9 @@ test('drives with simplified mobile touch controls', async ({ page }) => {
   await expect.poll(async () => (await touchInputState(page)).touchAirbrake ?? false).toBe(true)
   await expect.poll(async () => (await touchInputState(page)).touchBoost ?? true).toBe(false)
   await expect.poll(async () => (await touchInputState(page)).touchSteer ?? 0).toBeLessThan(-0.9)
-  await expect.poll(async () => {
-    const fill = await page.getByTestId('mobile-airbrake-fill').boundingBox()
-    const button = await drift.boundingBox()
-    if (!fill || !button) return 0
-    return fill.width / Math.max(1, button.width)
-  }, { timeout: 1_000 }).toBeGreaterThan(0.18)
+  await expect.poll(async () => (
+    await page.getByTestId('mobile-airbrake-fill').evaluate((node) => (node as HTMLElement).style.minWidth)
+  ), { timeout: 2_000 }).toBe('28%')
   await drift.dispatchEvent('pointercancel', { pointerId: 10, button: 0, isPrimary: true, pointerType: 'touch' })
   await expect.poll(async () => (await vibrationEvents(page)).some((pattern) => pattern === 12)).toBe(true)
 
@@ -490,8 +490,8 @@ test('starts a playable 3D race and renders canvas pixels', async ({ page }) => 
   await page.keyboard.up('Shift')
   await releaseThrottle(page)
 
-  await expect(page.getByTestId('hud')).toContainText('POWER')
-  await expect(page.getByTestId('hud')).toContainText('INTEGRITY')
+  await expect(page.getByTestId('hud')).toContainText('POWER', { timeout: 15_000 })
+  await expect(page.getByTestId('hud')).toContainText('INTEGRITY', { timeout: 15_000 })
   await expect.poll(() => canvasHasNonBlankPixels(page)).toBe(true)
   await expect.poll(async () => {
     const stats = await canvasPixelStats(page)

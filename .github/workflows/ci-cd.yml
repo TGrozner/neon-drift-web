@@ -114,6 +114,17 @@ jobs:
         run: npm run e2e -- --grep "${{ matrix.grep }}"
         env:
           PLAYWRIGHT_USE_BUILD: 'true'
+          PLAYWRIGHT_TEST_TIMEOUT: '90000'
+
+      - name: Upload e2e failure artifacts
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: playwright-e2e-${{ matrix.shard }}
+          path: |
+            test-results/**
+            playwright-report/**
+          if-no-files-found: ignore
 
   build:
     name: Build

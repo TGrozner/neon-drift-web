@@ -21,6 +21,12 @@ const clearDriveButtons = (onTouch: (command: TouchCommand, active: boolean) => 
   onTouch('airbrake', false)
 }
 
+const releasePointerCapture = (target: HTMLButtonElement, pointerId: number) => {
+  if (typeof target.hasPointerCapture === 'function' && target.hasPointerCapture(pointerId)) {
+    target.releasePointerCapture(pointerId)
+  }
+}
+
 const bindAction = (
   command: DriveButtonCommand,
   onTouch: (command: TouchCommand, active: boolean) => void,
@@ -39,17 +45,13 @@ const bindAction = (
   },
   onPointerUp: (event: PointerEvent<HTMLButtonElement>) => {
     event.preventDefault()
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
+    releasePointerCapture(event.currentTarget, event.pointerId)
     setPressed(command, false)
     onTouch(command, false)
   },
   onPointerCancel: (event: PointerEvent<HTMLButtonElement>) => {
     event.preventDefault()
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
+    releasePointerCapture(event.currentTarget, event.pointerId)
     setPressed(command, false)
     onTouch(command, false)
   },
@@ -134,19 +136,12 @@ export function TouchControls({ airbrakeCharge, autoThrottle, onTouch, onReset }
     },
     onPointerUp: (event: PointerEvent<HTMLButtonElement>) => {
       event.preventDefault()
-      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-        event.currentTarget.releasePointerCapture(event.pointerId)
-      }
-      if (boostPointerActive.current) {
-        boostPointerActive.current = false
-        armBoostPulse(false)
-      }
+      releasePointerCapture(event.currentTarget, event.pointerId)
+      boostPointerActive.current = false
     },
     onPointerCancel: (event: PointerEvent<HTMLButtonElement>) => {
       event.preventDefault()
-      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-        event.currentTarget.releasePointerCapture(event.pointerId)
-      }
+      releasePointerCapture(event.currentTarget, event.pointerId)
       boostPointerActive.current = false
     },
     onContextMenu: (event: PointerEvent<HTMLButtonElement>) => {

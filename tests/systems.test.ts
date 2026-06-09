@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createElement } from 'react'
-import { cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { createBotBrain, getBotInput } from '../shared/bot'
 import { FIXED_DT, PACK_CONTACT, RACE, SHIP_PROFILES, SLIPSTREAM } from '../shared/constants'
 import { clamp, cross3, distanceAlongForward, dot3, signedWrappedDelta, wrapDistance } from '../shared/math'
@@ -19,6 +19,7 @@ import { travelYawForVehicle, visualYawForVehicle } from '../shared/vehicleVisua
 import { NeonAudioEngine } from '../src/audio/neonAudio'
 import { RaceOverlay } from '../src/components/RaceOverlay'
 import { TelemetryCockpit } from '../src/components/TelemetryCockpit'
+import { TouchControls } from '../src/components/TouchControls'
 import { Tutorial } from '../src/components/Tutorial'
 import { draftMeterRatio } from '../src/components/draftSignals'
 import { standingsForHud } from '../src/components/hudRows'
@@ -978,6 +979,43 @@ describe('browser integration helpers', () => {
 
     applyTouchCommand(touch, 'right', false)
     expect(touch.steer).toBe(0)
+  })
+
+  it('keeps mobile tap boost on a fixed latch after pointer release', () => {
+    vi.useFakeTimers()
+    try {
+      const onTouch = vi.fn()
+      render(createElement(TouchControls, {
+        airbrakeCharge: 0,
+        autoThrottle: false,
+        onTouch,
+        onReset: vi.fn(),
+      }))
+      const boost = screen.getByRole('button', { name: 'Boost' })
+      const boostArms = () => onTouch.mock.calls.filter(([command, active]) => command === 'boost' && active).length
+      onTouch.mockClear()
+
+      fireEvent.pointerDown(boost, { pointerId: 1, button: 0, isPrimary: true, pointerType: 'touch' })
+      expect(boostArms()).toBe(1)
+
+      act(() => {
+        vi.advanceTimersByTime(900)
+      })
+      fireEvent.pointerUp(boost, { pointerId: 1, button: 0, isPrimary: true, pointerType: 'touch' })
+      expect(boostArms()).toBe(1)
+
+      act(() => {
+        vi.advanceTimersByTime(299)
+      })
+      expect(onTouch.mock.calls.some(([command, active]) => command === 'boost' && active === false)).toBe(false)
+
+      act(() => {
+        vi.advanceTimersByTime(2)
+      })
+      expect(onTouch.mock.calls.some(([command, active]) => command === 'boost' && active === false)).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('renders tutorial UI when tutorial storage is unavailable', () => {
