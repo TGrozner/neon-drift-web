@@ -54,7 +54,7 @@ const common = {
   boostContinueThreshold: 0.025,
   boostRiskDrainScale: 0.34,
   airbrakeExitMinSeconds: 0.16,
-  airbrakeExitFullSeconds: 0.62,
+  airbrakeExitFullSeconds: 0.54,
   airbrakeExitSlipForFullBoost: scaled(360),
   airbrakeExitPowerCost: 0.018,
   airbrakeExitCooldown: 0.36,

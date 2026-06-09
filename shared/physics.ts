@@ -244,9 +244,9 @@ export const calculateAirbrakeExitCharge = (
   if (!vehicle.isAirbraking) return Math.max(vehicle.lastAirbrakeExitStrength * vehicle.airbrakeExitPulse, 0)
   if (vehicle.airbrakeHoldSeconds < profile.airbrakeExitMinSeconds) {
     return clamp(
-      (vehicle.airbrakeHoldSeconds / Math.max(0.01, profile.airbrakeExitMinSeconds)) * 0.42,
+      (vehicle.airbrakeHoldSeconds / Math.max(0.01, profile.airbrakeExitMinSeconds)) * 0.5,
       0,
-      0.42,
+      0.5,
     )
   }
   return calculateAirbrakeExitStrength(
@@ -561,8 +561,8 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
     vehicle.airbrakeHoldSeconds = 0
     vehicle.lastAirbrakeExitStrength = 0
     const exitHasDriftIntent =
-      Math.abs(steer) >= 0.22 ||
-      Math.abs(vehicle.lateralSpeed) >= profile.airbrakeExitSlipForFullBoost * 0.16
+      Math.abs(steer) >= 0.16 ||
+      Math.abs(vehicle.lateralSpeed) >= profile.airbrakeExitSlipForFullBoost * 0.13
     const canExitBoost =
       heldSeconds >= profile.airbrakeExitMinSeconds &&
       throttle > 0.15 &&

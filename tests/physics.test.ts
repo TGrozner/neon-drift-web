@@ -3,6 +3,8 @@ import { CRASH_OUT, INTEGRITY, SHIP_PROFILES, SLIPSTREAM } from '../shared/const
 import {
   EMPTY_INPUT,
   applyIntegrityDamage,
+  calculateAirbrakeExitCharge,
+  calculateAirbrakeExitStrength,
   createVehicle,
   resetToLastGate,
   stepVehicle,
@@ -228,6 +230,26 @@ describe('ship physics', () => {
     expect(vehicle.forwardSpeed - before).toBeLessThan(SHIP_PROFILES.balanced.airbrakeExitBoostImpulse * 0.2)
   })
 
+  it('reports a readable monotonic airbrake exit charge', () => {
+    const vehicle = createVehicle('ship', 'Ship', 'balanced', true, 20, 0)
+    vehicle.isAirbraking = true
+    vehicle.lateralSpeed = SHIP_PROFILES.balanced.airbrakeExitSlipForFullBoost
+    const input = { ...EMPTY_INPUT, throttle: 1, steer: 1, airbrake: true }
+    const profile = SHIP_PROFILES.balanced
+
+    vehicle.airbrakeHoldSeconds = profile.airbrakeExitMinSeconds * 0.5
+    const earlyCharge = calculateAirbrakeExitCharge(vehicle, input)
+    vehicle.airbrakeHoldSeconds = profile.airbrakeExitMinSeconds
+    const minimumCharge = calculateAirbrakeExitCharge(vehicle, input)
+    vehicle.airbrakeHoldSeconds = profile.airbrakeExitFullSeconds
+    const fullCharge = calculateAirbrakeExitCharge(vehicle, input)
+
+    expect(earlyCharge).toBeGreaterThan(0.2)
+    expect(minimumCharge).toBeGreaterThanOrEqual(0.65)
+    expect(minimumCharge).toBeGreaterThan(earlyCharge)
+    expect(fullCharge).toBeCloseTo(1)
+  })
+
   it('does not trigger airbrake exit boost while already at the rail', () => {
     const vehicle = createVehicle('ship', 'Ship', 'balanced', true, 20, TUTORIAL_CIRCUIT.width * 0.5)
     vehicle.isAirbraking = true
@@ -264,7 +286,12 @@ describe('ship physics', () => {
       nearbyVehicles: 0,
     })
     const afterFirst = vehicle.forwardSpeed
+    const firstStrength = vehicle.lastAirbrakeExitStrength
+    const powerAfterFirst = vehicle.power
     expect(vehicle.airbrakeExitPulse).toBeGreaterThan(0)
+    expect(firstStrength).toBeGreaterThan(calculateAirbrakeExitStrength(0.28, 1, 8, 'balanced') * 0.98)
+    expect(powerAfterFirst).toBeLessThan(1)
+    expect(vehicle.airbrakeExitCooldown).toBe(0)
     expect(afterFirst).toBeGreaterThan(before)
 
     stepVehicle(vehicle, {
@@ -283,6 +310,29 @@ describe('ship physics', () => {
       nearbyVehicles: 0,
     })
     expect(vehicle.airbrakeExitPulse).toBe(0)
+  })
+
+  it('does not spend airbrake exit boost without throttle on release', () => {
+    const vehicle = createVehicle('ship', 'Ship', 'balanced', true, 20, 0)
+    vehicle.lateralSpeed = 8
+    stepVehicle(vehicle, {
+      track: TUTORIAL_CIRCUIT,
+      input: { ...EMPTY_INPUT, throttle: 1, steer: 1, airbrake: true },
+      dt: 0.28,
+      slipstream: noSlipstream,
+      nearbyVehicles: 0,
+    })
+
+    stepVehicle(vehicle, {
+      track: TUTORIAL_CIRCUIT,
+      input: { ...EMPTY_INPUT, throttle: 0, steer: 1 },
+      dt: 0.016,
+      slipstream: noSlipstream,
+      nearbyVehicles: 0,
+    })
+
+    expect(vehicle.airbrakeExitPulse).toBe(0)
+    expect(vehicle.lastAirbrakeExitStrength).toBe(0)
   })
 
   it('honors boost activation, continue threshold, and empty lockout', () => {
