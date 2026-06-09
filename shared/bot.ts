@@ -11,6 +11,7 @@ export type BotBrain = {
   cleanLineBias: number
   draftIntent: number
   trafficBrakeIntent: number
+  steerIntent: number
   wantsPad: boolean
 }
 
@@ -22,6 +23,7 @@ export const createBotBrain = (vehicleId: string, seed: number): BotBrain => ({
   cleanLineBias: 0,
   draftIntent: 0,
   trafficBrakeIntent: 0,
+  steerIntent: 0,
   wantsPad: false,
 })
 
@@ -169,14 +171,25 @@ export const getBotInput = (
   const laneGain = 0.16 - speedRatio * 0.045
   const lateralDamping = 0.075 + speedRatio * 0.035
   const yawDamping = 0.42 + speedRatio * 0.18
-  const steer = clamp(
-    laneError * laneGain - vehicle.lateralSpeed * lateralDamping - vehicle.yawOffset * yawDamping,
-    -0.82,
-    0.82,
-  )
-
   const airbrakeThreshold = 10.4 + clean.intent * 2.2
   const wantsAirbrake = turnDegrees >= airbrakeThreshold && brake < 0.65
+  const travelYaw = Math.atan2(vehicle.lateralSpeed, Math.max(1, Math.abs(vehicle.forwardSpeed)))
+  const yawTravelMismatch = vehicle.yawOffset - travelYaw
+  const steerLimit = wantsAirbrake ? 0.82 : 0.68
+  const rawSteer = clamp(
+    laneError * laneGain -
+      vehicle.lateralSpeed * lateralDamping -
+      yawTravelMismatch * yawDamping -
+      vehicle.yawOffset * 0.12,
+    -steerLimit,
+    steerLimit,
+  )
+  brain.steerIntent =
+    Math.abs(brain.steerIntent) <= 0.001
+      ? rawSteer
+      : smooth(brain.steerIntent, rawSteer, wantsAirbrake ? 16 : 24, dt)
+  const steer = clamp(brain.steerIntent, -steerLimit, steerLimit)
+
   const straightEnough = turnDegrees <= 10.5
   const usefulBoost =
     straightEnough &&

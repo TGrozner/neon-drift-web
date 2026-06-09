@@ -433,6 +433,31 @@ describe('bot ai', () => {
     expect(fullLockFrames).toBe(0)
   })
 
+  it('keeps stunt-track bot noses close to their travel direction', () => {
+    const race = startRace('balanced', 'inversion-ribbon')
+    updateRace(race, EMPTY_INPUT, 0.5)
+    updateRace(race, EMPTY_INPUT, 3.1)
+
+    let maxBotYaw = 0
+    let maxTravelMismatch = 0
+    let sustainedMismatchFrames = 0
+    for (let frame = 0; frame < 540; frame += 1) {
+      updateRace(race, { throttle: 1, steer: 0, boost: false, airbrake: false, reset: false }, 1 / 60)
+      for (const vehicle of race.vehicles) {
+        if (vehicle.isPlayer || vehicle.finished || vehicle.forwardSpeed < 12) continue
+        const travelYaw = Math.atan2(vehicle.lateralSpeed, Math.max(1, Math.abs(vehicle.forwardSpeed)))
+        const mismatch = Math.abs(vehicle.yawOffset - travelYaw)
+        maxBotYaw = Math.max(maxBotYaw, Math.abs(vehicle.yawOffset))
+        maxTravelMismatch = Math.max(maxTravelMismatch, mismatch)
+        if (mismatch > 0.58) sustainedMismatchFrames += 1
+      }
+    }
+
+    expect(maxBotYaw).toBeLessThan(0.92)
+    expect(maxTravelMismatch).toBeLessThan(0.72)
+    expect(sustainedMismatchFrames).toBeLessThan(12)
+  })
+
   it('softens tutorial bots that are already ahead of the player', () => {
     const race = startRace('balanced', 'tutorial-circuit')
     race.phase = 'racing'

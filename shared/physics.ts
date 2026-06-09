@@ -693,7 +693,18 @@ export const stepVehicle = (vehicle: Vehicle, context: StepVehicleContext): void
   vehicle.lane += vehicle.lateralSpeed * dt
 
   const activeProfile = track.sample(vehicle.distance)
-  vehicle.yawOffset = yawOffsetForHeading(activeProfile.tangent, activeProfile.right, heading)
+  const intendedYawOffset = yawOffsetForHeading(activeProfile.tangent, activeProfile.right, heading)
+  const velocityHeading = normalize3(
+    add3(scale3(activeProfile.tangent, vehicle.forwardSpeed), scale3(activeProfile.right, vehicle.lateralSpeed)),
+    activeProfile.tangent,
+  )
+  const velocityYawOffset = yawOffsetForHeading(activeProfile.tangent, activeProfile.right, velocityHeading)
+  const velocityYawBlend = vehicle.isPlayer
+    ? 0
+    : saturate(planarSpeed / Math.max(1, profile.maxSpeed * 0.36)) * (vehicle.isAirbraking ? 0.24 : 0.56)
+  vehicle.yawOffset = clampYawOffset(
+    intendedYawOffset + (velocityYawOffset - intendedYawOffset) * velocityYawBlend,
+  )
   if (Math.abs(vehicle.lane) > activeProfile.width * TRACK_LIMITS.autoResetOffsetMultiplier) {
     resetToLastGate(vehicle)
     vehicle.crashOutGraceRemaining = Math.max(vehicle.crashOutGraceRemaining, 0.6)

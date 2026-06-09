@@ -1023,7 +1023,11 @@ export class NeonRenderer {
     const profile = track.sample(vehicle.distance)
     const hoverClearance = vehicle.telemetry.hoverClearance || 1.25
     const position = trackToWorld(track, vehicle.distance, vehicle.lane, hoverClearance)
-    const visualYaw = clamp(vehicle.yawOffset * 1.18, -1.08, 1.08)
+    const travelYaw = Math.atan2(vehicle.lateralSpeed, Math.max(1, Math.abs(vehicle.forwardSpeed)))
+    const visualYawSource = vehicle.isPlayer ? vehicle.yawOffset : vehicle.yawOffset * 0.62 + travelYaw * 0.38
+    const visualYaw = vehicle.isPlayer
+      ? clamp(visualYawSource * 1.18, -1.08, 1.08)
+      : clamp(visualYawSource, -0.78, 0.78)
     const forward = normalize3(add3(scale3(profile.tangent, Math.cos(visualYaw)), scale3(profile.right, Math.sin(visualYaw))))
     const visualRight = normalize3(cross3(forward, profile.up), profile.right)
     group.position.copy(toThree(position))
