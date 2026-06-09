@@ -382,6 +382,7 @@ test('drives with simplified mobile touch controls', async ({ page }) => {
   await boost.dispatchEvent('pointerdown', { pointerId: 8, button: 0, isPrimary: true, pointerType: 'touch' })
   await expect(boost).toHaveAttribute('aria-pressed', 'true', { timeout: 500 })
   await expect(boost.locator('.boost-fill')).toBeVisible({ timeout: 500 })
+  await expect.poll(async () => page.getByTestId('mobile-boost-fill').evaluate((node) => getComputedStyle(node).animationDuration)).toBe('1.2s')
   await expect.poll(async () => (await touchInputState(page)).touchBoost ?? false, { timeout: 500 }).toBe(true)
   await boost.dispatchEvent('pointerup', { pointerId: 8, button: 0, isPrimary: true, pointerType: 'touch' })
   expect((await touchInputState(page)).touchBoost ?? false).toBe(true)
@@ -393,7 +394,14 @@ test('drives with simplified mobile touch controls', async ({ page }) => {
   await drift.dispatchEvent('pointerdown', { pointerId: 10, button: 0, isPrimary: true, pointerType: 'touch' })
   await expect(drift).toHaveAttribute('aria-pressed', 'true')
   await expect.poll(async () => (await touchInputState(page)).touchAirbrake ?? false).toBe(true)
+  await expect.poll(async () => (await touchInputState(page)).touchBoost ?? true).toBe(false)
   await expect.poll(async () => (await touchInputState(page)).touchSteer ?? 0).toBeLessThan(-0.9)
+  await expect.poll(async () => {
+    const fill = await page.getByTestId('mobile-airbrake-fill').boundingBox()
+    const button = await drift.boundingBox()
+    if (!fill || !button) return 0
+    return fill.width / Math.max(1, button.width)
+  }, { timeout: 1_000 }).toBeGreaterThan(0.18)
   await drift.dispatchEvent('pointercancel', { pointerId: 10, button: 0, isPrimary: true, pointerType: 'touch' })
   await expect.poll(async () => (await vibrationEvents(page)).some((pattern) => pattern === 12)).toBe(true)
 

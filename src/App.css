@@ -866,11 +866,12 @@
 .touch-action-button.boost.pressed .boost-fill {
   width: 100%;
   background: linear-gradient(90deg, rgba(93, 253, 122, 0.55), rgba(108, 232, 255, 0.28));
-  animation: mobile-boost-pulse 1200ms linear both;
+  animation: mobile-boost-pulse linear both;
 }
 
 .airbrake-fill {
   background: linear-gradient(90deg, rgba(255, 191, 74, 0.42), rgba(255, 61, 242, 0.22));
+  transition: width 80ms linear;
 }
 
 @keyframes mobile-boost-pulse {

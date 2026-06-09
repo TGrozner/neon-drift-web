@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'react'
 import type { TouchCommand } from '../hooks/useNeonGame'
 import { triggerMobileHaptic } from './mobileFeedback'
 
@@ -102,9 +102,17 @@ export function TouchControls({ airbrakeCharge, autoThrottle, onTouch, onReset }
     return () => window.clearTimeout(timeout)
   }, [boostPulseToken, onTouch])
 
-  const setPressed = (command: DriveButtonCommand, active: boolean) => {
+  const setPressed = useCallback((command: DriveButtonCommand, active: boolean) => {
     setPressedState((current) => ({ ...current, [command]: active }))
-  }
+  }, [])
+
+  const handleDriveTouch = useCallback((command: TouchCommand, active: boolean) => {
+    if (command === 'airbrake' && active) {
+      setPressed('boost', false)
+      onTouch('boost', false)
+    }
+    onTouch(command, active)
+  }, [onTouch, setPressed])
 
   const armBoostPulse = (withHaptic = true) => {
     setPressed('boost', true)
@@ -149,9 +157,11 @@ export function TouchControls({ airbrakeCharge, autoThrottle, onTouch, onReset }
     draggable: false,
   })
 
-  const airbrakeFill = `${Math.max(0, Math.min(1, Number.isFinite(airbrakeCharge) ? airbrakeCharge : 0)) * 100}%`
+  const normalizedAirbrakeCharge = Math.max(0, Math.min(1, Number.isFinite(airbrakeCharge) ? airbrakeCharge : 0))
+  const visibleAirbrakeCharge = pressed.airbrake ? Math.max(normalizedAirbrakeCharge, 0.28) : normalizedAirbrakeCharge
+  const airbrakeFill = `${visibleAirbrakeCharge * 100}%`
   const buttonProps = (command: DriveButtonCommand) => ({
-    ...bindAction(command, onTouch, setPressed),
+    ...bindAction(command, handleDriveTouch, setPressed),
     'aria-pressed': pressed[command],
     className: `${command === 'left' || command === 'right' ? 'steer-button' : 'touch-action-button'} ${command} ${pressed[command] ? 'pressed' : ''}`.trim(),
     draggable: false,
@@ -161,11 +171,22 @@ export function TouchControls({ airbrakeCharge, autoThrottle, onTouch, onReset }
     <div className="touch-controls" aria-label="Touch driving controls">
       <div className="touch-actions">
         <button type="button" {...boostButtonProps()} aria-label="Boost">
-          <span className="touch-button-fill boost-fill" key={boostPulseToken} aria-hidden="true" />
+          <span
+            className="touch-button-fill boost-fill"
+            key={boostPulseToken}
+            style={{ animationDuration: `${MOBILE_BOOST_TAP_MS}ms` }}
+            data-testid="mobile-boost-fill"
+            aria-hidden="true"
+          />
           <span className="touch-button-label">BOOST</span>
         </button>
         <button type="button" {...buttonProps('airbrake')} aria-label="Drift airbrake">
-          <span className="touch-button-fill airbrake-fill" style={{ width: airbrakeFill }} aria-hidden="true" />
+          <span
+            className="touch-button-fill airbrake-fill"
+            style={{ width: airbrakeFill, minWidth: pressed.airbrake ? '28%' : undefined }}
+            data-testid="mobile-airbrake-fill"
+            aria-hidden="true"
+          />
           <span className="touch-button-label">DRIFT</span>
         </button>
       </div>
