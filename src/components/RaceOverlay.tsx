@@ -1,16 +1,10 @@
 import { getPlayer, type RaceState } from '../../shared/race'
+import { formatRaceTime, runAssessment, statCardsFor } from './raceStatsView'
 
 type Props = {
   race: RaceState
   onRestart: () => void
   onMenu: () => void
-}
-
-const formatTime = (seconds: number): string => {
-  if (seconds < 0) return '--:--'
-  const minutes = Math.floor(seconds / 60)
-  const rest = seconds - minutes * 60
-  return `${minutes}:${rest.toFixed(2).padStart(5, '0')}`
 }
 
 export function RaceOverlay({ race, onRestart, onMenu }: Props) {
@@ -20,6 +14,8 @@ export function RaceOverlay({ race, onRestart, onMenu }: Props) {
   const playerEliminated = player.eliminated
   const playerPosition = race.standings.findIndex((vehicle) => vehicle.id === player.id) + 1
   const title = playerEliminated ? 'CRASH OUT' : race.phase === 'finished' ? 'FINISH' : 'RESULTS'
+  const statCards = statCardsFor(race.runStats)
+  const assessment = runAssessment(race.runStats, playerEliminated)
 
   return (
     <div className="race-overlay" data-testid="race-results">
@@ -37,15 +33,24 @@ export function RaceOverlay({ race, onRestart, onMenu }: Props) {
         {race.phase === 'results' && (
           <>
             <div className="results-summary">
-              <span>{playerEliminated ? 'STATUS OUT' : `TIME ${formatTime(player.finishTime)}`}</span>
-              <span>BEST LAP {formatTime(player.bestLapSeconds)}</span>
+              <span>{playerEliminated ? 'STATUS OUT' : `TIME ${formatRaceTime(player.finishTime)}`}</span>
+              <span>BEST LAP {formatRaceTime(player.bestLapSeconds)}</span>
             </div>
+            <div className="results-analysis" data-testid="run-analysis">
+              {statCards.map((card) => (
+                <div className={card.tone ? `analysis-card ${card.tone}` : 'analysis-card'} key={card.label}>
+                  <span>{card.label}</span>
+                  <strong>{card.value}</strong>
+                </div>
+              ))}
+            </div>
+            <div className="results-assessment">{assessment}</div>
             <div className="results-table">
               {race.standings.map((vehicle, index) => (
                 <div className={vehicle.id === player.id ? 'result-row local' : 'result-row'} key={vehicle.id}>
                   <span>{index + 1}</span>
                   <span>{vehicle.name}</span>
-                  <span>{vehicle.eliminated ? 'OUT' : vehicle.finished ? formatTime(vehicle.finishTime) : `${Math.round(Math.abs(vehicle.forwardSpeed))}m/s`}</span>
+                  <span>{vehicle.eliminated ? 'OUT' : vehicle.finished ? formatRaceTime(vehicle.finishTime) : `${Math.round(Math.abs(vehicle.forwardSpeed))}m/s`}</span>
                   <span>{vehicle.timePenalty > 0 ? `+${vehicle.timePenalty.toFixed(1)}` : '-'}</span>
                 </div>
               ))}
@@ -54,7 +59,7 @@ export function RaceOverlay({ race, onRestart, onMenu }: Props) {
         )}
         {race.phase === 'results' && (
           <div className="results-actions">
-            <button type="button" onClick={onRestart}>RACE AGAIN</button>
+            <button type="button" onClick={onRestart} data-testid="retry-race">RETRY NOW</button>
             <button type="button" onClick={onMenu}>SETUP</button>
           </div>
         )}

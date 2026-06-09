@@ -26,6 +26,37 @@ import { trackById, type RaceTrack, type TrackId } from './track'
 
 export type RacePhase = 'menu' | 'warmup' | 'countdown' | 'racing' | 'finished' | 'results'
 
+export type RaceRunStats = {
+  sampleSeconds: number
+  speedSeconds: number
+  maxSpeed: number
+  cleanLineSeconds: number
+  boostStarts: number
+  boostSeconds: number
+  airbrakeSeconds: number
+  airbrakeExits: number
+  draftSeconds: number
+  speedPadHits: number
+  rechargePadHits: number
+  gateHits: number
+  lapHits: number
+  rivalPasses: number
+  knockoutRewards: number
+  contactCount: number
+  contactSeconds: number
+  peakContact: number
+  damageHits: number
+  heavyDamageHits: number
+  integrityDamageTaken: number
+  offTrackSeconds: number
+  wrongWaySeconds: number
+  resetCount: number
+  lowestIntegrity: number
+  lowestPower: number
+  bestPosition: number
+  resetInputHeld: boolean
+}
+
 export type RaceState = {
   track: RaceTrack
   phase: RacePhase
@@ -43,10 +74,42 @@ export type RaceState = {
   rivalGaps: Record<string, number>
   lastToast: string
   toastAge: number
+  runStats: RaceRunStats
 }
 
 const botNames = ['P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8']
 const botProfiles: ShipProfileId[] = ['swift', 'heavy', 'balanced', 'swift', 'balanced', 'heavy', 'swift']
+
+export const createRaceRunStats = (): RaceRunStats => ({
+  sampleSeconds: 0,
+  speedSeconds: 0,
+  maxSpeed: 0,
+  cleanLineSeconds: 0,
+  boostStarts: 0,
+  boostSeconds: 0,
+  airbrakeSeconds: 0,
+  airbrakeExits: 0,
+  draftSeconds: 0,
+  speedPadHits: 0,
+  rechargePadHits: 0,
+  gateHits: 0,
+  lapHits: 0,
+  rivalPasses: 0,
+  knockoutRewards: 0,
+  contactCount: 0,
+  contactSeconds: 0,
+  peakContact: 0,
+  damageHits: 0,
+  heavyDamageHits: 0,
+  integrityDamageTaken: 0,
+  offTrackSeconds: 0,
+  wrongWaySeconds: 0,
+  resetCount: 0,
+  lowestIntegrity: 1,
+  lowestPower: 1,
+  bestPosition: 1,
+  resetInputHeld: false,
+})
 
 export const createRaceState = (
   profileId: ShipProfileId = 'balanced',
@@ -101,6 +164,7 @@ export const createRaceState = (
     rivalGaps: {},
     lastToast: '',
     toastAge: 0,
+    runStats: createRaceRunStats(),
   }
 }
 
@@ -150,6 +214,92 @@ const progressFor = (race: RaceState, vehicle: Vehicle): number => {
       : vehicle.distance
   const base = (vehicle.lap - 1) * race.track.totalLength + firstLapDistance
   return vehicle.finished ? race.totalLaps * race.track.totalLength + 1000 - vehicle.finishTime : base
+}
+
+type PlayerRunSnapshot = {
+  boostStartPulse: number
+  airbrakeExitPulse: number
+  speedPadPulse: number
+  rechargePadPulse: number
+  gatePulse: number
+  lapPulse: number
+  rivalPassPulse: number
+  knockoutRewardPulse: number
+  packBumpPulse: number
+  integrity: number
+}
+
+const pulseRose = (current: number, previous: number, threshold = 0.05): boolean =>
+  current > threshold && previous <= threshold
+
+const snapshotPlayerRun = (race: RaceState): PlayerRunSnapshot => {
+  const player = getPlayer(race)
+  return {
+    boostStartPulse: player.boostStartPulse,
+    airbrakeExitPulse: player.airbrakeExitPulse,
+    speedPadPulse: player.speedPadPulse,
+    rechargePadPulse: player.rechargePadPulse,
+    gatePulse: player.gatePulse,
+    lapPulse: player.lapPulse,
+    rivalPassPulse: player.rivalPassPulse,
+    knockoutRewardPulse: player.knockoutRewardPulse,
+    packBumpPulse: player.packBumpPulse,
+    integrity: player.integrity,
+  }
+}
+
+const recordPlayerRunStats = (
+  race: RaceState,
+  before: PlayerRunSnapshot,
+  input: VehicleInput,
+  dt: number,
+): void => {
+  const player = getPlayer(race)
+  const stats = race.runStats
+  const racingSample = race.raceTime > 0 && race.phase !== 'menu' && race.phase !== 'warmup' && race.phase !== 'countdown'
+
+  if (racingSample && !player.finished) {
+    const speed = Math.abs(player.forwardSpeed)
+    stats.sampleSeconds += dt
+    stats.speedSeconds += speed * dt
+    stats.maxSpeed = Math.max(stats.maxSpeed, speed)
+    stats.cleanLineSeconds += Math.max(0, Math.min(1, player.telemetry.cleanLineQuality)) * dt
+    if (player.isBoosting) stats.boostSeconds += dt
+    if (player.isAirbraking) stats.airbrakeSeconds += dt
+    if (player.slipstreamPulse > 0.05) stats.draftSeconds += dt
+    if (player.telemetry.offTrack || player.telemetry.railPressure > 0.05) stats.offTrackSeconds += dt
+    if (player.telemetry.wrongWay) stats.wrongWaySeconds += dt
+    if (player.packBumpPulse > 0.05) stats.contactSeconds += dt
+  }
+
+  if (input.reset && !stats.resetInputHeld) stats.resetCount += 1
+  stats.resetInputHeld = input.reset
+
+  if (pulseRose(player.boostStartPulse, before.boostStartPulse)) stats.boostStarts += 1
+  if (pulseRose(player.airbrakeExitPulse, before.airbrakeExitPulse)) stats.airbrakeExits += 1
+  if (pulseRose(player.speedPadPulse, before.speedPadPulse)) stats.speedPadHits += 1
+  if (pulseRose(player.rechargePadPulse, before.rechargePadPulse)) stats.rechargePadHits += 1
+  if (pulseRose(player.gatePulse, before.gatePulse)) stats.gateHits += 1
+  if (pulseRose(player.lapPulse, before.lapPulse)) stats.lapHits += 1
+  if (pulseRose(player.rivalPassPulse, before.rivalPassPulse)) stats.rivalPasses += 1
+  if (pulseRose(player.knockoutRewardPulse, before.knockoutRewardPulse)) stats.knockoutRewards += 1
+
+  if (player.packBumpPulse > Math.max(0.05, before.packBumpPulse + 0.12)) {
+    stats.contactCount += 1
+  }
+  stats.peakContact = Math.max(stats.peakContact, player.packBumpPulse)
+
+  const integrityDamage = Math.max(0, before.integrity - player.integrity)
+  if (integrityDamage > 0.001) {
+    stats.damageHits += 1
+    if (integrityDamage >= 0.08) stats.heavyDamageHits += 1
+    stats.integrityDamageTaken += integrityDamage
+  }
+
+  stats.lowestIntegrity = Math.min(stats.lowestIntegrity, player.integrity)
+  stats.lowestPower = Math.min(stats.lowestPower, player.power)
+  const position = race.standings.findIndex((vehicle) => vehicle.id === player.id) + 1
+  if (position > 0) stats.bestPosition = Math.min(stats.bestPosition || position, position)
 }
 
 export const updateStandings = (race: RaceState): void => {
@@ -421,6 +571,7 @@ export const updateRace = (
   if (race.phase === 'results') return
 
   race.raceTime += dt
+  const beforePlayerRun = snapshotPlayerRun(race)
   const beforeProgress = Object.fromEntries(race.vehicles.map((vehicle) => [vehicle.id, progressFor(race, vehicle)]))
   const beforeCrashOutCounts = Object.fromEntries(race.vehicles.map((vehicle) => [vehicle.id, vehicle.crashOutCount]))
 
@@ -488,6 +639,7 @@ export const updateRace = (
   applyRivalPassReward(race, beforeProgress, beforeCrashOutCounts)
   updateStandings(race)
   updateRivals(race)
+  recordPlayerRunStats(race, beforePlayerRun, playerInput, dt)
 
   const player = getPlayer(race)
   if (player.eliminated && race.phase === 'racing') {

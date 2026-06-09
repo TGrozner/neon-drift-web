@@ -6,6 +6,7 @@ import { GameCanvas } from './components/GameCanvas'
 import { Hud } from './components/Hud'
 import { MenuPanel } from './components/MenuPanel'
 import { RaceOverlay } from './components/RaceOverlay'
+import { TelemetryCockpit } from './components/TelemetryCockpit'
 import { TouchControls } from './components/TouchControls'
 import { Tutorial } from './components/Tutorial'
 import { useNeonAudio } from './hooks/useNeonAudio'
@@ -26,6 +27,7 @@ function App() {
     <main className="app-shell">
       <GameCanvas raceRef={raceRef} />
       <Hud race={race} />
+      <TelemetryCockpit race={race} />
       <Tutorial activeTrackId={tutorialTrackId} race={race} raceVersion={version} />
       <RaceOverlay
         race={race}

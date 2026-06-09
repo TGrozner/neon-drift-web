@@ -201,11 +201,13 @@ export function Hud({ race }: Props) {
 
       <div className="event-strip">
         {player.telemetry.offTrack && <span className="warning">TRACK LIMIT</span>}
+        {player.telemetry.railPressure > 0.35 && <span className="warning">RAIL PRESSURE</span>}
         {player.telemetry.wrongWay && <span className="warning">WRONG WAY</span>}
         {player.isAirbraking && <span>AIRBRAKE</span>}
         {player.airbrakeExitPulse > 0 && <span>EXIT BOOST</span>}
         {player.isBoosting && <span>BOOST</span>}
         {player.slipstreamPulse > 0.05 && <span>DRAFT</span>}
+        {player.cleanLinePulse > 0.3 && <span>CLEAN LINE</span>}
         {player.knockoutRewardPulse > 0.05 && <span>KO ENERGY</span>}
         {player.packBumpPulse > 0.05 && <span>CONTACT</span>}
         {player.powerDamagePulse > 0.05 && <span className={player.telemetry.integrityCritical ? 'warning' : ''}>INTEGRITY HIT</span>}

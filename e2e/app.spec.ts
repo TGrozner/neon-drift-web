@@ -425,6 +425,20 @@ test('shows mobile-specific tutorial copy', async ({ page }) => {
   await expect(page.getByTestId('tutorial')).toContainText('lower pads')
 })
 
+test('shows opt-in run telemetry cockpit during a race', async ({ page }) => {
+  await page.addInitScript((key) => localStorage.setItem(key, 'true'), tutorialStorageKey)
+  await page.goto('./?e2e=1&debug=telemetry')
+  await startRaceFromMenu(page)
+  await focusRace(page)
+  await holdThrottle(page)
+  await expectMoving(page)
+
+  await expect(page.getByTestId('telemetry-cockpit')).toBeVisible()
+  await expect(page.getByTestId('telemetry-cockpit')).toContainText('RUN TELEMETRY')
+  await expect(page.getByTestId('telemetry-cockpit')).toContainText('AVG')
+  await releaseThrottle(page)
+})
+
 test('clears held keyboard controls when the page loses focus', async ({ page }) => {
   await goToGame(page)
   await startRaceFromMenu(page)

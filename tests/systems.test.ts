@@ -16,6 +16,8 @@ import {
 } from '../shared/slipstream'
 import { ALL_TRACKS, TUTORIAL_CIRCUIT, TRACKS, trackToWorld } from '../shared/track'
 import { NeonAudioEngine } from '../src/audio/neonAudio'
+import { RaceOverlay } from '../src/components/RaceOverlay'
+import { TelemetryCockpit } from '../src/components/TelemetryCockpit'
 import { Tutorial } from '../src/components/Tutorial'
 import { draftMeterRatio } from '../src/components/draftSignals'
 import { standingsForHud } from '../src/components/hudRows'
@@ -569,6 +571,29 @@ describe('race flow', () => {
     expect(Math.abs(rival.lane - player.lane)).toBeGreaterThan(0.2)
     expect(player.power).toBeGreaterThanOrEqual(0.4)
     expect(player.integrity).toBeLessThan(0.7)
+    expect(race.runStats.contactCount).toBeGreaterThan(0)
+    expect(race.runStats.integrityDamageTaken).toBeGreaterThan(0)
+  })
+
+  it('records run telemetry for tuning without changing race flow', () => {
+    const race = startRace('balanced')
+    race.phase = 'racing'
+    race.raceTime = 0
+    const player = getPlayer(race)
+    player.forwardSpeed = SHIP_PROFILES[player.profileId].maxSpeed * 0.42
+
+    updateRace(race, { throttle: 1, steer: 0, boost: true, airbrake: false, reset: false }, 1 / 60)
+    updateRace(race, { throttle: 1, steer: 1, boost: false, airbrake: true, reset: false }, 1 / 60)
+    updateRace(race, { throttle: 1, steer: 1, boost: false, airbrake: false, reset: true }, 1 / 60)
+    updateRace(race, { throttle: 1, steer: 0, boost: false, airbrake: false, reset: true }, 1 / 60)
+
+    expect(race.phase).toBe('racing')
+    expect(race.runStats.sampleSeconds).toBeGreaterThan(0)
+    expect(race.runStats.maxSpeed).toBeGreaterThan(0)
+    expect(race.runStats.boostStarts).toBeGreaterThanOrEqual(1)
+    expect(race.runStats.boostSeconds).toBeGreaterThan(0)
+    expect(race.runStats.resetCount).toBe(1)
+    expect(race.runStats.lowestIntegrity).toBeLessThanOrEqual(1)
   })
 
   it('charges more pack contact damage to the closing ship', () => {
@@ -741,6 +766,46 @@ describe('race flow', () => {
     updateRace(race, { throttle: 1, steer: 0, boost: true, airbrake: false, reset: false }, 1 / 60)
 
     expect(race.slipstream.segments).toHaveLength(0)
+  })
+
+  it('renders run analysis and retry affordance on results', () => {
+    const race = startRace('balanced')
+    const player = getPlayer(race)
+    race.phase = 'results'
+    race.raceTime = 48.2
+    player.finished = true
+    player.finishTime = 48.2
+    player.bestLapSeconds = 23.4
+    player.finalPosition = 1
+    race.runStats.sampleSeconds = 12
+    race.runStats.speedSeconds = 840
+    race.runStats.maxSpeed = 88
+    race.runStats.cleanLineSeconds = 9
+    race.runStats.boostStarts = 3
+    race.runStats.boostSeconds = 2.4
+    race.runStats.contactCount = 1
+    updateStandings(race)
+
+    render(createElement(RaceOverlay, { race, onRestart: vi.fn(), onMenu: vi.fn() }))
+
+    expect(screen.getByTestId('run-analysis')).toBeTruthy()
+    expect(screen.getByText('AVG')).toBeTruthy()
+    expect(screen.getByText('MAX')).toBeTruthy()
+    expect(screen.getByTestId('retry-race').textContent).toBe('RETRY NOW')
+  })
+
+  it('shows the telemetry cockpit only when explicitly requested', () => {
+    const race = startRace('balanced')
+    race.phase = 'racing'
+
+    window.history.pushState({}, '', '/')
+    render(createElement(TelemetryCockpit, { race }))
+    expect(screen.queryByTestId('telemetry-cockpit')).toBeNull()
+    cleanup()
+
+    window.history.pushState({}, '', '/?debug=telemetry')
+    render(createElement(TelemetryCockpit, { race }))
+    expect(screen.getByTestId('telemetry-cockpit').textContent).toContain('RUN TELEMETRY')
   })
 
   it('tracks nearest rivals around the player instead of only the leaders', () => {

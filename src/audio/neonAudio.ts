@@ -54,7 +54,9 @@ type Snapshot = {
   rivalPassPulse: number
   knockoutRewardPulse: number
   powerCritical: boolean
+  integrityCritical: boolean
   offTrack: boolean
+  railPressure: number
   wrongWay: boolean
 }
 
@@ -172,6 +174,7 @@ export class NeonAudioEngine {
   private currentMusic: Cue | null = null
   private railScrapeCooldown = 0
   private powerCriticalCooldown = 0
+  private integrityCriticalCooldown = 0
   private wrongWayCooldown = 0
   private lastSyncAt = performance.now()
 
@@ -228,7 +231,9 @@ export class NeonAudioEngine {
       rivalPassPulse: player.rivalPassPulse,
       knockoutRewardPulse: player.knockoutRewardPulse,
       powerCritical: player.telemetry.powerCritical,
+      integrityCritical: player.telemetry.integrityCritical,
       offTrack: player.telemetry.offTrack,
+      railPressure: player.telemetry.railPressure,
       wrongWay: player.telemetry.wrongWay,
     }
   }
@@ -257,7 +262,10 @@ export class NeonAudioEngine {
     if (crossed(current.lapPulse, previous.lapPulse)) this.play('lap')
     if (crossed(current.crashOutPulse, previous.crashOutPulse)) this.play('crash_out')
     if (crossed(current.crashLaunchPulse, previous.crashLaunchPulse)) this.play('crash_launch')
-    if (crossed(current.powerDamagePulse, previous.powerDamagePulse)) this.play('power_damage')
+    if (crossed(current.powerDamagePulse, previous.powerDamagePulse)) {
+      this.play('power_damage')
+      if (current.railPressure > 0.28) this.play('rail_hit')
+    }
     if (crossed(current.packBumpPulse, previous.packBumpPulse)) this.play('ship_bump')
     if (crossed(current.rivalPassPulse, previous.rivalPassPulse)) this.play('rival_pass')
     if (crossed(current.knockoutRewardPulse, previous.knockoutRewardPulse)) this.play('knockout_reward')
@@ -265,6 +273,10 @@ export class NeonAudioEngine {
     if (current.powerCritical && this.powerCriticalCooldown <= 0) {
       this.play('power_critical')
       this.powerCriticalCooldown = 1.35
+    }
+    if (current.integrityCritical && this.integrityCriticalCooldown <= 0) {
+      this.play('power_danger', 0.5, 0.72)
+      this.integrityCriticalCooldown = 1.6
     }
     if (current.offTrack && this.railScrapeCooldown <= 0) {
       this.play('rail_scrape')
@@ -339,6 +351,7 @@ export class NeonAudioEngine {
   private updateCooldowns(dt: number): void {
     this.railScrapeCooldown = Math.max(0, this.railScrapeCooldown - dt)
     this.powerCriticalCooldown = Math.max(0, this.powerCriticalCooldown - dt)
+    this.integrityCriticalCooldown = Math.max(0, this.integrityCriticalCooldown - dt)
     this.wrongWayCooldown = Math.max(0, this.wrongWayCooldown - dt)
   }
 }
