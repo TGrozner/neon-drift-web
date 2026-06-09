@@ -84,7 +84,7 @@ type TrackSample = TrackProfile
 const WORLD_SCALE = 0.01
 const SOURCE_MIN_TRACK_WIDTH = 900
 const SOURCE_SPEED_PAD_LENGTH = 310
-export const TRACK_GEOMETRY_SMOOTHING = 4
+export const TRACK_GEOMETRY_SMOOTHING = 2
 const up: Vec3 = { x: 0, y: 1, z: 0 }
 const gateCount = 8
 

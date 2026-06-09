@@ -93,7 +93,7 @@ jobs:
           - shard: controls
             grep: 'mobile event strip|simplified mobile|clears held keyboard'
           - shard: race-render-audio
-            grep: 'playable 3D race|source-authored inversion|race audio'
+            grep: 'playable 3D race|source-authored stunt|race audio'
     steps:
       - name: Checkout
         uses: actions/checkout@v6

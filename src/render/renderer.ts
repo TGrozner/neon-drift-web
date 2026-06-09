@@ -5,7 +5,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { INTEGRITY, SHIP_PROFILES, SLIPSTREAM } from '../../shared/constants'
-import { add3, clamp, cross3, dot3, normalize3, scale3, signedWrappedDelta, type Vec3 } from '../../shared/math'
+import { add3, clamp, cross3, dot3, normalize3, scale3, signedWrappedDelta, sub3, type Vec3 } from '../../shared/math'
 import type { RaceState } from '../../shared/race'
 import { slipstreamSegmentInfluence } from '../../shared/slipstream'
 import { trackToWorld, type RaceTrack } from '../../shared/track'
@@ -195,6 +195,9 @@ type NeonRenderStats = {
   sourceTrackSlabModelCount: number
   sourceTrackRailModelCount: number
   sourceTrackKitLoaded: boolean
+  cameraFov: number
+  cameraRollDegrees: number
+  cameraFrameDot: number
 }
 
 export class NeonRenderer {
@@ -217,9 +220,11 @@ export class NeonRenderer {
   private trackSpectacleDecorCount = 0
   private boostLightningSegmentCount = 0
   private playerBoostLightningStrength = 0
+  private cameraFrameDot = 0
   private lastCameraUpdate = performance.now()
   private cameraTarget = new THREE.Vector3()
   private smoothedCameraForward = new THREE.Vector3()
+  private smoothedCameraUp = new THREE.Vector3()
   private cameraRoll = 0
   private trackId = ''
   private padMarkerCount = 0
@@ -341,6 +346,9 @@ export class NeonRenderer {
       sourceTrackSlabModelCount: 0,
       sourceTrackRailModelCount: 0,
       sourceTrackKitLoaded: false,
+      cameraFov: 0,
+      cameraRollDegrees: 0,
+      cameraFrameDot: 0,
     }
     stats.calls = this.renderer.info.render.calls
     stats.triangles = this.renderer.info.render.triangles
@@ -374,10 +382,19 @@ export class NeonRenderer {
       this.sourceTrackGatePartModelCount >= this.expectedSourceTrackGatePartModelCount &&
       this.sourceTrackPadModelCount >= this.expectedSourceTrackPadModelCount &&
       this.sourceTrackStartLineModelCount >= this.expectedSourceTrackStartLineModelCount
+    stats.cameraFov = this.camera.fov
+    stats.cameraRollDegrees = this.cameraRoll * (180 / Math.PI)
+    stats.cameraFrameDot = this.cameraFrameDot
     statsWindow.__NEON_RENDER_STATS = stats
   }
 
   private rebuildTrack(track: RaceTrack): void {
+    this.smoothedCameraForward.set(0, 0, 0)
+    this.smoothedCameraUp.set(0, 0, 0)
+    this.cameraTarget.set(0, 0, 0)
+    this.cameraRoll = 0
+    this.lastCameraUpdate = performance.now()
+
     const stale = this.scene.getObjectByName('track-root')
     if (stale) {
       this.scene.remove(stale)
@@ -1479,11 +1496,11 @@ export class NeonRenderer {
     const bankSafety = clamp((Math.abs(profile.bankDegrees) - 52) / 70, 0, 1)
     const trackBlend = 0.26 + (0.54 - 0.26) * bankSafety
     const targetForward = normalize3(add3(scale3(driveForward, 1 - trackBlend), scale3(profile.tangent, trackBlend)), profile.tangent)
-    const above = scale3(profile.up, 2.55 + speedRatio * 1.35)
     const now = performance.now()
     const dt = Math.min(0.05, (now - this.lastCameraUpdate) / 1000)
     this.lastCameraUpdate = now
     const forwardSharpness = 8.4 * (1 - 0.48 * clamp(speedRatio, 0, 1) * curveAmount)
+    const upSharpness = 6.8 * (1 - 0.36 * clamp(speedRatio, 0, 1) * curveAmount)
     const targetForwardThree = toThree(targetForward)
     if (this.smoothedCameraForward.lengthSq() <= 0.001) {
       this.smoothedCameraForward.copy(targetForwardThree)
@@ -1499,7 +1516,29 @@ export class NeonRenderer {
       },
       targetForward,
     )
-    const cameraRight = normalize3(cross3(cameraForward, profile.up), profile.right)
+    const targetUpThree = toThree(profile.up)
+    if (this.smoothedCameraUp.lengthSq() <= 0.001) {
+      this.smoothedCameraUp.copy(targetUpThree)
+    } else {
+      this.smoothedCameraUp.lerp(targetUpThree, Math.min(1, dt * upSharpness)).normalize()
+    }
+    let cameraUp = normalize3(
+      {
+        x: this.smoothedCameraUp.x,
+        y: this.smoothedCameraUp.y,
+        z: this.smoothedCameraUp.z,
+      },
+      profile.up,
+    )
+    cameraUp = normalize3(sub3(cameraUp, scale3(cameraForward, dot3(cameraUp, cameraForward))), profile.up)
+    const cameraRight = normalize3(cross3(cameraForward, cameraUp), profile.right)
+    cameraUp = normalize3(cross3(cameraRight, cameraForward), cameraUp)
+    this.cameraFrameDot = Math.max(
+      Math.abs(dot3(cameraForward, cameraUp)),
+      Math.abs(dot3(cameraForward, cameraRight)),
+      Math.abs(dot3(cameraUp, cameraRight)),
+    )
+    const above = scale3(cameraUp, 2.55 + speedRatio * 1.35)
     const sideSlip = clamp(player.lateralSpeed / Math.max(1, SHIP_PROFILES[player.profileId].boostSpeed), -1, 1)
     const eventPush =
       player.boostStartPulse * 0.45 +
@@ -1523,13 +1562,12 @@ export class NeonRenderer {
     )
     const shakeRight = Math.sin(race.raceTime * 43.7) * shakeIntensity
     const shakeUp = Math.cos(race.raceTime * 37.1) * shakeIntensity * 0.62
-    const shake = add3(scale3(cameraRight, shakeRight), scale3(profile.up, shakeUp))
+    const shake = add3(scale3(cameraRight, shakeRight), scale3(cameraUp, shakeUp))
     const desired = toThree(add3(add3(add3(add3(position, behind), above), side), shake))
     const lookAhead = (8.4 + speedRatio * 2.4) * (1 - curveAmount * 0.34)
     this.camera.position.lerp(desired, Math.min(1, dt * 13.8))
     this.cameraTarget.lerp(toThree(add3(add3(position, scale3(cameraForward, Math.max(5.5, lookAhead))), scale3(cameraRight, sideSlip * 0.42))), Math.min(1, dt * forwardSharpness))
-    const cameraUp = new THREE.Vector3(0, 1, 0).lerp(toThree(profile.up), 0.92).normalize()
-    this.camera.up.copy(cameraUp)
+    this.camera.up.copy(toThree(cameraUp))
     this.camera.lookAt(this.cameraTarget)
     const targetRoll = clamp((profile.bankDegrees * 0.52 - sideSlip * 1.7) * (Math.PI / 180), -28 * Math.PI / 180, 28 * Math.PI / 180)
     this.cameraRoll += (targetRoll - this.cameraRoll) * Math.min(1, dt * 8.5)

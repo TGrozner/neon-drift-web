@@ -580,8 +580,8 @@ test('starts a playable 3D race and renders canvas pixels', async ({ page }) => 
     gateParts: 24,
     pads: 8,
     startLine: 1,
-    slabs: 1536,
-    rails: 3072,
+    slabs: 768,
+    rails: 1536,
   })
 })
 
@@ -593,6 +593,27 @@ test('starts a playable source-authored stunt track', async ({ page }) => {
   await focusRace(page)
   await holdThrottle(page)
   await expectMoving(page)
+  await expect.poll(() => page.evaluate(() => {
+    const stats = (window as Window & typeof globalThis & {
+      __NEON_RENDER_STATS?: {
+        cameraFov?: number
+        cameraRollDegrees?: number
+        cameraFrameDot?: number
+      }
+    }).__NEON_RENDER_STATS
+    const fov = stats?.cameraFov ?? Number.NaN
+    const roll = stats?.cameraRollDegrees ?? Number.NaN
+    const frameDot = stats?.cameraFrameDot ?? Number.NaN
+    return (
+      Number.isFinite(fov) &&
+      fov >= 70 &&
+      fov <= 118.5 &&
+      Number.isFinite(roll) &&
+      Math.abs(roll) <= 29 &&
+      Number.isFinite(frameDot) &&
+      frameDot < 0.02
+    )
+  })).toBe(true)
   await expect.poll(() => canvasHasNonBlankPixels(page)).toBe(true)
   await expect.poll(() => page.evaluate(() => {
     const stats = (window as Window & typeof globalThis & {
@@ -609,8 +630,8 @@ test('starts a playable source-authored stunt track', async ({ page }) => {
     }
   }), { timeout: 15_000 }).toEqual({
     loaded: true,
-    slabs: 2560,
-    rails: 5120,
+    slabs: 1280,
+    rails: 2560,
   })
   await releaseThrottle(page)
 })
