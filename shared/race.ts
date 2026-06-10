@@ -116,6 +116,7 @@ export const createRaceState = (
   trackId: TrackId = 'tutorial-circuit',
 ): RaceState => {
   const track = trackById(trackId)
+  const totalLaps = trackId === 'tutorial-debug-circuit' ? 1 : RACE.totalLaps
   const vehicles: Vehicle[] = []
   const botBrains: Record<string, BotBrain> = {}
   const slots = track.startGrid
@@ -152,7 +153,7 @@ export const createRaceState = (
     phase: 'menu',
     phaseTime: 0,
     raceTime: 0,
-    totalLaps: RACE.totalLaps,
+    totalLaps,
     nextFinalPosition: 1,
     playerId: 'player',
     vehicles,

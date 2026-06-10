@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { RACE, SHIP_PROFILES } from '../../shared/constants'
+import { SHIP_PROFILES } from '../../shared/constants'
 import type { Vehicle } from '../../shared/physics'
 import { gapToNext, getPlayer, type RaceState } from '../../shared/race'
 import { draftMeterRatio } from './draftSignals'
@@ -137,7 +137,7 @@ export function Hud({ race }: Props) {
       </div>
 
       <div className="hud-panel hud-race">
-        <div className="race-main">LAP {Math.min(player.lap, RACE.totalLaps)}/{RACE.totalLaps}</div>
+        <div className="race-main">LAP {Math.min(player.lap, race.totalLaps)}/{race.totalLaps}</div>
         <div>POS {localPosition}/{race.vehicles.length}</div>
         <div>GATE {player.nextGateIndex + 1} {Math.round(nextGateDistance)}m</div>
         <div>{formatTime(raceTime)}</div>

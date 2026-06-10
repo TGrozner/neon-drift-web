@@ -16,6 +16,7 @@ import {
 
 export type TrackId =
   | 'tutorial-circuit'
+  | 'tutorial-debug-circuit'
   | 'neon-oval'
   | 'friend-circuit'
   | 'skyline-sprint'
@@ -87,6 +88,9 @@ const SOURCE_SPEED_PAD_LENGTH = 310
 export const TRACK_GEOMETRY_SMOOTHING = 2
 const up: Vec3 = { x: 0, y: 1, z: 0 }
 const gateCount = 8
+
+const isSimpleTrainingGeometryTrack = (trackId: TrackId): boolean =>
+  trackId === 'tutorial-circuit' || trackId === 'tutorial-debug-circuit'
 
 const STUNT_TRACKS = new Set<TrackId>([
   'gravity-loop',
@@ -269,7 +273,7 @@ const makeGates = (track: Pick<RaceTrack, 'totalLength' | 'sample'>): TrackGate[
   })
 
 const makeStartGrid = (trackId: TrackId): StartGridSlot[] => {
-  if (trackId === 'tutorial-circuit') {
+  if (isSimpleTrainingGeometryTrack(trackId)) {
     return [
       { index: 0, distance: 0, lane: 0, back: 12 },
       { index: 1, distance: 0, lane: -10, back: 24 },
@@ -308,14 +312,14 @@ const insideTurnLaneScale = (track: RaceTrack, fraction: number, scale: number):
 }
 
 const speedPadFractionsFor = (id: TrackId): number[] => {
-  if (id === 'tutorial-circuit') return [0.32, 0.48, 0.62, 0.78, 0.9]
+  if (isSimpleTrainingGeometryTrack(id)) return [0.32, 0.48, 0.62, 0.78, 0.9]
   if (STUNT_TRACKS.has(id)) return [0.1, 0.24, 0.4, 0.56, 0.72, 0.88]
   if (id === 'banked-speedway') return [0.11, 0.28, 0.43, 0.57, 0.74, 0.9]
   return [0.1, 0.24, 0.48, 0.62, 0.82, 0.93]
 }
 
 const rechargePadFractionsFor = (id: TrackId): number[] => {
-  if (id === 'tutorial-circuit') return [0.18, 0.36, 0.68]
+  if (isSimpleTrainingGeometryTrack(id)) return [0.18, 0.36, 0.68]
   if (STUNT_TRACKS.has(id)) return [0.33, 0.67]
   if (id === 'banked-speedway') return [0.36, 0.69]
   return [0.34, 0.74]
@@ -407,7 +411,11 @@ export const ALL_TRACKS: RaceTrack[] = SOURCE_TRACK_SPECS.map(makeSourceTrack)
 export const TUTORIAL_CIRCUIT: RaceTrack =
   ALL_TRACKS.find((track) => track.id === 'tutorial-circuit') ?? ALL_TRACKS[0]
 
-export const TRACKS: RaceTrack[] = ALL_TRACKS.filter((track) => track.id !== 'neon-oval')
+const SELECTABLE_TRACKS = ALL_TRACKS.filter((track) => track.id !== 'neon-oval')
+const DEBUG_TRACK = SELECTABLE_TRACKS.find((track) => track.id === 'tutorial-debug-circuit')
+export const TRACKS: RaceTrack[] = DEBUG_TRACK
+  ? [...SELECTABLE_TRACKS.filter((track) => track.id !== 'tutorial-debug-circuit'), DEBUG_TRACK]
+  : SELECTABLE_TRACKS
 
 export const trackById = (id: TrackId): RaceTrack =>
   ALL_TRACKS.find((track) => track.id === id) ?? TUTORIAL_CIRCUIT
