@@ -429,6 +429,8 @@ test('drives with simplified mobile touch controls', async ({ page }) => {
   await expect.poll(async () => (await touchInputState(page)).touchBoost ?? true).toBe(false)
   await expect.poll(async () => (await touchInputState(page)).touchSteer ?? 0).toBeLessThan(-0.9)
   await drift.dispatchEvent('pointercancel', { pointerId: 10, button: 0, isPrimary: true, pointerType: 'touch' })
+  await expect(drift).toHaveAttribute('aria-pressed', 'false')
+  await expect.poll(async () => (await touchInputState(page)).touchAirbrake ?? true).toBe(false)
   await expect.poll(async () => (await vibrationEvents(page)).some((pattern) => pattern === 12)).toBe(true)
 
   await turnRight.dispatchEvent('pointercancel', { pointerId: 7, button: 0, isPrimary: true, pointerType: 'touch' })
@@ -441,11 +443,6 @@ test('drives with simplified mobile touch controls', async ({ page }) => {
   await expect(turnLeft).toHaveAttribute('aria-pressed', 'true')
   await expect.poll(async () => (await touchInputState(page)).touchSteer ?? 0).toBeGreaterThan(0.9)
   await turnLeft.dispatchEvent('pointercancel', { pointerId: 9, button: 0, isPrimary: true, pointerType: 'touch' })
-
-  await drift.dispatchEvent('pointerdown', { pointerId: 8, button: 0, isPrimary: true, pointerType: 'touch' })
-  await expect(drift).toHaveAttribute('aria-pressed', 'true')
-  await drift.dispatchEvent('pointercancel', { pointerId: 8, button: 0, isPrimary: true, pointerType: 'touch' })
-  await expect(drift).toHaveAttribute('aria-pressed', 'false')
 })
 
 test('shows mobile-specific tutorial copy', async ({ page }) => {
