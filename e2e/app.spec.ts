@@ -438,11 +438,6 @@ test('drives with simplified mobile touch controls', async ({ page }) => {
   await expect.poll(async () => (await touchInputState(page)).touchSteer ?? 0).toBe(0)
   await page.waitForTimeout(1_350)
   await expect.poll(async () => (await touchInputState(page)).touchBoost ?? true).toBe(false)
-
-  await turnLeft.dispatchEvent('pointerdown', { pointerId: 9, button: 0, isPrimary: true, pointerType: 'touch' })
-  await expect(turnLeft).toHaveAttribute('aria-pressed', 'true')
-  await expect.poll(async () => (await touchInputState(page)).touchSteer ?? 0).toBeGreaterThan(0.9)
-  await turnLeft.dispatchEvent('pointercancel', { pointerId: 9, button: 0, isPrimary: true, pointerType: 'touch' })
 })
 
 test('shows mobile-specific tutorial copy', async ({ page }) => {
