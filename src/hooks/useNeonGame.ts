@@ -7,6 +7,7 @@ import {
   goToMenu,
   startRace,
   updateRace,
+  type RacePhase,
   type RaceState,
 } from '../../shared/race'
 import { clamp, finiteOr } from '../../shared/math'
@@ -125,10 +126,17 @@ const mergeInput = (keyboard: KeyState, touch: KeyState): VehicleInput => ({
 
 const compactRaceDiagnostics = (race: RaceState) => {
   const player = getPlayer(race)
+  const finishedVehicles = race.vehicles.filter((vehicle) => vehicle.finished).length
+  const eliminatedVehicles = race.vehicles.filter((vehicle) => vehicle.eliminated).length
+
   return {
     phase: race.phase,
     track: race.track.id,
     raceTime: Math.round(race.raceTime * 10) / 10,
+    raceVehicleCount: race.vehicles.length,
+    finishedVehicles,
+    eliminatedVehicles,
+    activeVehicles: race.vehicles.length - eliminatedVehicles,
     lap: player.lap,
     position: player.finalPosition || Math.max(1, race.standings.findIndex((vehicle) => vehicle.id === player.id) + 1),
     finished: player.finished,
@@ -144,6 +152,25 @@ const compactRaceDiagnostics = (race: RaceState) => {
     boostStarts: race.runStats.boostStarts,
     airbrakeExits: race.runStats.airbrakeExits,
   }
+}
+
+type RaceCompletionReason = 'player_crash_out' | 'all_vehicles_finished' | 'results_after_wait' | 'ongoing'
+
+const deriveRaceCompletionReason = (previousPhase: RacePhase, race: RaceState): RaceCompletionReason | undefined => {
+  const player = getPlayer(race)
+  if (race.phase === 'finished') {
+    return player.eliminated ? 'player_crash_out' : 'ongoing'
+  }
+  if (race.phase === 'results' && previousPhase === 'finished') {
+    return player.eliminated ? 'player_crash_out' : 'results_after_wait'
+  }
+  if (race.phase === 'results' && race.vehicles.every((vehicle) => vehicle.finished)) {
+    return 'all_vehicles_finished'
+  }
+  if (race.phase === 'results' && player.finished) {
+    return 'all_vehicles_finished'
+  }
+  return undefined
 }
 
 const roundNumber = (value: number, digits = 2): number => {
@@ -297,14 +324,22 @@ export const useNeonGame = () => {
       const phaseChanged = raceRef.current.phase !== previousPhase
       if (phaseChanged) {
         const raceSnapshot = compactRaceDiagnostics(raceRef.current)
-        neonDiagnostics.log('race', 'phase_change', {
+        const completionReason = deriveRaceCompletionReason(previousPhase, raceRef.current)
+        const transitionPayload = {
           from: previousPhase,
           to: raceRef.current.phase,
+          completionReason,
           ...raceSnapshot,
-        })
+        }
+        neonDiagnostics.log('race', 'phase_change', transitionPayload)
         if (raceRef.current.phase === 'finished' || raceRef.current.phase === 'results') {
           if (raceRef.current.phase === 'results') {
-            neonDiagnostics.log('race', 'results_summary', buildRaceResultSummary(raceRef.current))
+            const raceSummary = buildRaceResultSummary(raceRef.current)
+            const summaryPayload = {
+              ...raceSummary,
+              completionReason: completionReason === 'all_vehicles_finished' ? 'all_vehicles_finished' : completionReason ?? 'ongoing',
+            }
+            neonDiagnostics.log('race', 'results_summary', summaryPayload)
           }
           neonDiagnostics.log('race', 'summary', raceSnapshot)
         }
