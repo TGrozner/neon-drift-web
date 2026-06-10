@@ -82,21 +82,18 @@ const extractTranscript = (event: unknown): string => {
   if (!results) return ''
 
   const resultCount = typeof results.length === 'number' ? results.length : 0
-
-  let finalText = ''
-  let interimText = ''
-  for (let index = 0; index < resultCount; index += 1) {
+  let fallbackText = ''
+  for (let index = resultCount - 1; index >= 0; index -= 1) {
     const result = results[index]
     const text = normalizeTranscript(typeof result?.[0]?.transcript === 'string' ? result[0].transcript : '')
     if (!text) continue
-    if (result.isFinal) {
-      finalText += `${finalText ? ' ' : ''}${text}`
-    } else {
-      interimText += `${interimText ? ' ' : ''}${text}`
+    if (!fallbackText) {
+      fallbackText = text
     }
+    if (result.isFinal) return text
   }
 
-  return (finalText || interimText).trim()
+  return fallbackText
 }
 
 const buildFeedbackPayload = (race: RaceState, source: FeedbackSource, text: string): FeedbackLogPayload => {
