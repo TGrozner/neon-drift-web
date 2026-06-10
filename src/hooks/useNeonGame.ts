@@ -57,6 +57,21 @@ export const createTouchState = (): TouchState => ({
   right: false,
 })
 
+export const isEditableTarget = (target: EventTarget | null): boolean => {
+  if (!(target instanceof HTMLElement)) return false
+  if (target.isContentEditable) return true
+  return target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
+}
+
+type KeyboardEventLike = Pick<KeyboardEvent, 'code' | 'key' | 'target'>
+
+export const shouldSuppressGameInputDefault = (event: KeyboardEventLike): boolean =>
+  !isEditableTarget(event.target) &&
+  (
+    ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code) ||
+    [' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)
+  )
+
 const normalizeKey = (event: KeyboardEvent): string =>
   event.key.length === 1 ? event.key.toLowerCase() : event.key
 
@@ -265,10 +280,7 @@ export const useNeonGame = () => {
       pressedKeysRef.current.add(event.code)
       pressedKeysRef.current.add(normalizeKey(event))
       publishInputDebug(pressedKeysRef.current, touchRef.current)
-      if (
-        ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code) ||
-        [' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)
-      ) {
+      if (shouldSuppressGameInputDefault(event)) {
         event.preventDefault()
       }
     }

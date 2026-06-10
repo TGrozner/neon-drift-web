@@ -344,6 +344,24 @@ test('plays s&box menu feedback cues', async ({ page }) => {
   )).toBe(true)
 })
 
+test('accepts spaces in feedback textarea under game input listener', async ({ page }) => {
+  await goToGame(page)
+  await page.evaluate(() => {
+    const probe = document.createElement('textarea')
+    probe.id = 'race-feedback-probe'
+    probe.value = ''
+    probe.style.position = 'fixed'
+    probe.style.top = '8px'
+    probe.style.left = '8px'
+    document.body.appendChild(probe)
+  })
+
+  const feedbackText = page.locator('#race-feedback-probe')
+  await feedbackText.click()
+  await feedbackText.type('OK OK')
+  await expect(feedbackText).toHaveValue('OK OK')
+})
+
 test('exposes source-authored tracks except Neon Oval as playable tracks', async ({ page }) => {
   await goToGame(page)
   await expect(page.locator('.menu-meta')).toContainText('Tutorial Circuit')
