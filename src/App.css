@@ -1148,6 +1148,43 @@
     grid-template-columns: 1fr;
   }
 
+  .results-feedback-trigger {
+    min-height: 52px;
+    padding: 12px 14px;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+  }
+
+  .results-feedback-panel {
+    margin-top: 10px;
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .results-feedback-label {
+    font-size: 11px;
+  }
+
+  .results-feedback-textarea {
+    min-height: 92px;
+    padding: 10px;
+    font-size: 14px;
+    line-height: 1.25;
+  }
+
+  .results-feedback-actions button {
+    min-height: 48px;
+    font-size: 12px;
+  }
+
+  .results-feedback-hint,
+  .results-feedback-warning,
+  .results-feedback-error,
+  .results-feedback-status {
+    font-size: 11px;
+    line-height: 1.2;
+  }
+
   .telemetry-cockpit {
     top: auto;
     left: 16px;
