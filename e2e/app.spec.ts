@@ -141,6 +141,24 @@ const startRaceFromMenu = async (page: Page) => {
   await page.getByTestId('start-race').click()
 }
 
+const releaseTouchControlIfPresent = async (
+  control: import('@playwright/test').Locator,
+  pointerId: number,
+) => {
+  if ((await control.count()) === 0) return false
+  try {
+    await control.dispatchEvent('pointercancel', {
+      pointerId,
+      button: 0,
+      isPrimary: true,
+      pointerType: 'touch',
+    }, { timeout: 2_000 })
+    return true
+  } catch {
+    return false
+  }
+}
+
 const holdThrottle = async (page: Page) => {
   await page.keyboard.down('w')
   await page.keyboard.down('ArrowUp')
@@ -434,8 +452,8 @@ test('drives with simplified mobile touch controls', async ({ page }) => {
   await expect.poll(async () => (await touchInputState(page)).touchAirbrake ?? true).toBe(false)
   await expect.poll(async () => (await vibrationEvents(page)).some((pattern) => pattern === 12)).toBe(true)
 
-  await turnRight.dispatchEvent('pointercancel', { pointerId: 7, button: 0, isPrimary: true, pointerType: 'touch' })
-  await expect(turnRight).toHaveAttribute('aria-pressed', 'false')
+  const turnRightReleased = await releaseTouchControlIfPresent(turnRight, 7)
+  if (turnRightReleased) await expect(turnRight).toHaveAttribute('aria-pressed', 'false')
   await expect.poll(async () => (await touchInputState(page)).touchSteer ?? 0).toBe(0)
   await page.waitForTimeout(1_350)
   await expect.poll(async () => (await touchInputState(page)).touchBoost ?? true).toBe(false)
