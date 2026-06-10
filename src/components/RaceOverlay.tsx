@@ -74,28 +74,29 @@ const getSpeechRecognition = (): { new (): SpeechRecognitionLike } | null => {
   return speechAwareWindow.SpeechRecognition ?? speechAwareWindow.webkitSpeechRecognition ?? null
 }
 
+const normalizeTranscript = (text: string): string => text.replace(/\s+/g, ' ').trim()
+
 const extractTranscript = (event: unknown): string => {
   const speechEvent = event as SpeechRecognitionEventLike
   const results = speechEvent.results
   if (!results) return ''
 
-  const resultIndex = typeof speechEvent.resultIndex === 'number' ? speechEvent.resultIndex : 0
   const resultCount = typeof results.length === 'number' ? results.length : 0
 
-  let interimText = ''
   let finalText = ''
-  for (let index = resultIndex; index < resultCount; index += 1) {
+  let interimText = ''
+  for (let index = 0; index < resultCount; index += 1) {
     const result = results[index]
-    const text = typeof result?.[0]?.transcript === 'string' ? result[0].transcript.trim() : ''
+    const text = normalizeTranscript(typeof result?.[0]?.transcript === 'string' ? result[0].transcript : '')
     if (!text) continue
     if (result.isFinal) {
       finalText += `${finalText ? ' ' : ''}${text}`
-      continue
+    } else {
+      interimText += `${interimText ? ' ' : ''}${text}`
     }
-    interimText += `${interimText ? ' ' : ''}${text}`
   }
 
-  return `${finalText} ${interimText}`.trim()
+  return (finalText || interimText).trim()
 }
 
 const buildFeedbackPayload = (race: RaceState, source: FeedbackSource, text: string): FeedbackLogPayload => {
@@ -199,7 +200,7 @@ export function RaceOverlay({ race, onRestart, onMenu }: Props) {
     stopDictation()
     const recognition = new SpeechRecognitionCtor()
     recognition.lang = 'fr-FR'
-    recognition.interimResults = true
+    recognition.interimResults = false
     recognition.continuous = false
     recognition.maxAlternatives = 1
     recognition.onstart = () => {
@@ -211,10 +212,7 @@ export function RaceOverlay({ race, onRestart, onMenu }: Props) {
     recognition.onresult = (event: unknown) => {
       const transcript = extractTranscript(event)
       if (!transcript) return
-      setFeedbackText((current) => {
-        if (!current || feedbackMode === 'voice') return transcript
-        return current ? `${current.trim()} ${transcript}` : transcript
-      })
+      setFeedbackText(transcript)
     }
     recognition.onerror = (event: unknown) => {
       const speechError = (event as { error?: string }).error

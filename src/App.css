@@ -1425,3 +1425,36 @@
     white-space: nowrap;
   }
 }
+
+.results-feedback-trigger {
+  width: 100%;
+  min-height: 56px;
+  margin: 2px 0 10px;
+  padding: 14px 20px;
+  border: 1px solid rgba(108, 232, 255, 0.45);
+  border-radius: 12px;
+  background: linear-gradient(130deg, rgba(108, 232, 255, 0.26), rgba(108, 232, 255, 0.05) 40%, rgba(255, 191, 74, 0.26));
+  color: #e8f7ff;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: center;
+  box-shadow: 0 12px 28px rgba(108, 232, 255, 0.15);
+}
+
+.results-feedback-trigger:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(255, 191, 74, 0.7);
+  box-shadow: 0 16px 32px rgba(255, 191, 74, 0.22);
+}
+
+.results-feedback-trigger:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.results-feedback-trigger:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+  filter: saturate(0.65);
+}
