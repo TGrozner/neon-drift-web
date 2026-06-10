@@ -16,11 +16,32 @@ env:
   NODE_VERSION: 24
 
 jobs:
+  config:
+    name: Check diagnostics deployment config
+    runs-on: ubuntu-latest
+    outputs:
+      can_deploy: ${{ steps.config.outputs.can_deploy }}
+    steps:
+      - name: Check Cloudflare secrets
+        id: config
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ] && [ -n "$DIAGNOSTICS_READ_TOKEN" ]; then
+            echo "can_deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "can_deploy=false" >> "$GITHUB_OUTPUT"
+            echo "Cloudflare deploy skipped: missing CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, or DIAGNOSTICS_READ_TOKEN."
+          fi
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DIAGNOSTICS_READ_TOKEN: ${{ secrets.DIAGNOSTICS_READ_TOKEN }}
+
   deploy:
     name: Deploy diagnostics collector
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: github.event_name == 'workflow_dispatch' || vars.ENABLE_DIAGNOSTICS_WORKER_DEPLOY == 'true'
+    needs: config
+    if: needs.config.outputs.can_deploy == 'true' && (github.event_name == 'workflow_dispatch' || vars.ENABLE_DIAGNOSTICS_WORKER_DEPLOY == 'true')
     steps:
       - name: Checkout
         uses: actions/checkout@v6

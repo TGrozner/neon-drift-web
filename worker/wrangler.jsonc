@@ -5,7 +5,8 @@
   "compatibility_date": "2026-06-10",
   "kv_namespaces": [
     {
-      "binding": "LOGS"
+      "binding": "LOGS",
+      "id": "43149e17599e495a80a5265e3452cbca"
     }
   ],
   "vars": {

@@ -1,7 +1,15 @@
 #!/usr/bin/env node
 
-const endpoint = normalizeEndpoint(process.env.DIAGNOSTICS_ENDPOINT ?? process.env.VITE_DIAGNOSTICS_ENDPOINT)
-const token = process.env.DIAGNOSTICS_READ_TOKEN
+import { existsSync, readFileSync } from 'node:fs'
+
+const localEnv = readLocalEnv()
+const endpoint = normalizeEndpoint(
+  process.env.DIAGNOSTICS_ENDPOINT ??
+  process.env.VITE_DIAGNOSTICS_ENDPOINT ??
+  localEnv.DIAGNOSTICS_ENDPOINT ??
+  localEnv.VITE_DIAGNOSTICS_ENDPOINT,
+)
+const token = process.env.DIAGNOSTICS_READ_TOKEN ?? localEnv.DIAGNOSTICS_READ_TOKEN
 const command = process.argv[2] ?? 'sessions'
 const value = process.argv[3]
 
@@ -41,6 +49,24 @@ function normalizeEndpoint(raw) {
   const url = new URL(raw)
   if (url.pathname === '/') url.pathname = '/collect'
   return url
+}
+
+function readLocalEnv() {
+  const path = '.env.diagnostics.local'
+  if (!existsSync(path)) return {}
+  return Object.fromEntries(
+    readFileSync(path, 'utf8')
+      .split(/\r?\n/)
+      .flatMap((line) => {
+        const trimmed = line.trim()
+        if (!trimmed || trimmed.startsWith('#')) return []
+        const separatorIndex = trimmed.indexOf('=')
+        if (separatorIndex === -1) return []
+        const key = trimmed.slice(0, separatorIndex).trim()
+        const value = trimmed.slice(separatorIndex + 1).trim()
+        return [[key, value]]
+      }),
+  )
 }
 
 function required(input, label) {
