@@ -59,19 +59,22 @@ Pages is available for this repository.
 
 ## Mobile diagnostics
 
-The browser keeps a persistent local diagnostics ring buffer in `localStorage`.
-It records session/device info, lifecycle events, race starts/phase changes,
-large simulation frame gaps, renderer frame summaries, slow frames, and runtime
-errors or unhandled promise rejections.
+The browser keeps a persistent local diagnostics ring buffer in `localStorage`
+and can upload it silently when `VITE_DIAGNOSTICS_ENDPOINT` is configured at
+build time. It records session/device info, lifecycle events, race starts/phase
+changes, race summaries, touch inputs, large simulation frame gaps, renderer
+frame summaries, slow frames, and runtime errors or unhandled promise
+rejections.
 
-To get a report from a phone after someone says it lagged:
+The diagnostics UI is hidden during normal play. Append `?logs=1` to the
+production URL only when a manual export is needed; that opens a debug panel
+with share/copy/download actions.
 
-1. Tap the `LOGS` button in the bottom-right corner.
-2. Tap `Partager` to open the mobile share sheet, or `Copier` to copy the JSON.
-3. Send the JSON report in the issue, chat, or debugging thread.
-
-You can append `?logs=1` to the production URL to open the diagnostics panel by
-default.
+For production collection, configure the repository variable
+`VITE_DIAGNOSTICS_ENDPOINT` with an HTTPS endpoint that accepts `POST
+application/json` from the Pages origin. The client uploads pending diagnostics
+silently on a debounce, immediately for warnings/errors, and again with
+`sendBeacon` when the page is hidden or closed.
 
 The same report is available from DevTools with:
 
@@ -80,7 +83,8 @@ window.__NEON_DIAGNOSTICS__.exportText()
 ```
 
 Logs stay local to the device until someone shares or copies the report; this
-static build does not upload telemetry to a server.
+static build only uploads telemetry automatically when a diagnostics ingestion
+endpoint is configured.
 
 ## Architecture
 

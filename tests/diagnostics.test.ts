@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   installNeonDiagnostics,
   NEON_DIAGNOSTICS_STORAGE_KEY,
@@ -8,6 +8,8 @@ import {
 
 describe('neon diagnostics', () => {
   beforeEach(() => {
+    vi.unstubAllEnvs()
+    vi.unstubAllGlobals()
     window.localStorage.clear()
     neonDiagnostics.clear()
   })
@@ -76,5 +78,23 @@ describe('neon diagnostics', () => {
     expect(summary.triangles).toBe(12345)
     expect(summary.sourceTrackKitLoaded).toBe(true)
     expect(summary.ignoredNested).toBeUndefined()
+  })
+
+  it('silently uploads pending diagnostics when an endpoint is configured', async () => {
+    vi.stubEnv('VITE_DIAGNOSTICS_ENDPOINT', 'https://logs.example.test/collect')
+    const fetch = vi.fn().mockResolvedValue({ ok: true })
+    vi.stubGlobal('fetch', fetch)
+
+    neonDiagnostics.log('mobile', 'manual_perf_report', { track: 'tutorial-circuit', fps: 42 })
+    await expect(neonDiagnostics.flushRemote()).resolves.toBe(true)
+
+    expect(fetch).toHaveBeenCalledWith(
+      'https://logs.example.test/collect',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: expect.stringContaining('manual_perf_report'),
+      }),
+    )
   })
 })

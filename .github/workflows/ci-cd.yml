@@ -18,6 +18,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   NODE_VERSION: 24
   VITE_BASE_PATH: /neon-drift-web/
+  VITE_DIAGNOSTICS_ENDPOINT: ${{ vars.VITE_DIAGNOSTICS_ENDPOINT }}
 
 jobs:
   typecheck:

@@ -92,11 +92,7 @@ export function DiagnosticsPanel() {
   }
 
   if (!open) {
-    return (
-      <button className="diagnostics-toggle" type="button" onClick={() => setOpen(true)}>
-        LOGS {totalEntries}
-      </button>
-    )
+    return null
   }
 
   return (

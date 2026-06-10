@@ -17,6 +17,7 @@ import {
 import { ALL_TRACKS, TRACK_GEOMETRY_SMOOTHING, TUTORIAL_CIRCUIT, TRACKS, trackToWorld } from '../shared/track'
 import { travelYawForVehicle, visualYawForVehicle } from '../shared/vehicleVisuals'
 import { NeonAudioEngine } from '../src/audio/neonAudio'
+import { DiagnosticsPanel } from '../src/components/DiagnosticsPanel'
 import { Hud } from '../src/components/Hud'
 import { RaceOverlay } from '../src/components/RaceOverlay'
 import { TelemetryCockpit } from '../src/components/TelemetryCockpit'
@@ -865,6 +866,17 @@ describe('race flow', () => {
     window.history.pushState({}, '', '/?debug=telemetry')
     render(createElement(TelemetryCockpit, { race }))
     expect(screen.getByTestId('telemetry-cockpit').textContent).toContain('RUN TELEMETRY')
+  })
+
+  it('keeps diagnostics UI hidden unless explicitly requested', () => {
+    window.history.pushState({}, '', '/')
+    const { container } = render(createElement(DiagnosticsPanel))
+    expect(container.textContent).toBe('')
+    cleanup()
+
+    window.history.pushState({}, '', '/?logs=1')
+    render(createElement(DiagnosticsPanel))
+    expect(screen.getByLabelText('Neon Drift diagnostics logs')).toBeTruthy()
   })
 
   it('shows launch charge during countdown only', () => {

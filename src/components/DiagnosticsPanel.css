@@ -1,20 +1,7 @@
-.diagnostics-toggle,
 .diagnostics-panel {
   position: absolute;
   z-index: 30;
   pointer-events: auto;
-}
-
-.diagnostics-toggle {
-  right: 14px;
-  bottom: calc(14px + env(safe-area-inset-bottom));
-  min-width: 72px;
-  min-height: 42px;
-  border: 1px solid rgba(255, 191, 74, 0.44);
-  background: rgba(3, 7, 14, 0.82);
-  color: #ffbf4a;
-  font-size: 12px;
-  font-weight: 1000;
 }
 
 .diagnostics-panel {

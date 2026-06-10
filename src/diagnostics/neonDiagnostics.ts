@@ -55,6 +55,7 @@ type NeonDiagnosticsApi = {
   exportText: () => string
   copyToClipboard: () => Promise<boolean>
   clear: () => void
+  flushRemote: () => Promise<boolean>
 }
 
 type ConnectionSource = {
@@ -90,11 +91,14 @@ type FrameWindow = {
 export const NEON_DIAGNOSTICS_STORAGE_KEY = 'neon-drift:diagnostics:v1'
 
 const STORAGE_PROBE_KEY = 'neon-drift:diagnostics-probe'
+const UPLOAD_CURSOR_KEY = 'neon-drift:diagnostics-upload-cursor'
 const MAX_ENTRIES = 600
+const MAX_UPLOAD_ENTRIES = 120
 const MAX_PAYLOAD_DEPTH = 3
 const MAX_PAYLOAD_KEYS = 18
 const MAX_STRING_LENGTH = 420
 const PERSIST_DEBOUNCE_MS = 1200
+const UPLOAD_DEBOUNCE_MS = 15_000
 const FRAME_WINDOW_MS = 10_000
 const SLOW_FRAME_MS = 50
 const VERY_SLOW_FRAME_MS = 120
@@ -104,6 +108,10 @@ let loaded = false
 let installed = false
 let storageAvailable: boolean | null = null
 let persistTimer: number | null = null
+let uploadTimer: number | null = null
+let uploadInFlight = false
+let uploadCursorLoaded = false
+let lastUploadedEntryId = 0
 let entries: NeonDiagnosticEntry[] = []
 let droppedEntries = 0
 let nextEntryId = 1
@@ -125,6 +133,10 @@ function createSessionId(): string {
 
 function canUseBrowser(): boolean {
   return typeof window !== 'undefined' && typeof document !== 'undefined'
+}
+
+function diagnosticsEndpoint(): string {
+  return (import.meta.env.VITE_DIAGNOSTICS_ENDPOINT ?? '').trim()
 }
 
 function matchesMedia(query: string): boolean {
@@ -167,6 +179,25 @@ function getStorage(): Storage | null {
   } catch {
     storageAvailable = false
     return null
+  }
+}
+
+function loadUploadCursor(): void {
+  if (uploadCursorLoaded) return
+  uploadCursorLoaded = true
+  const storage = getStorage()
+  if (!storage) return
+  const stored = Number(storage.getItem(UPLOAD_CURSOR_KEY) ?? 0)
+  lastUploadedEntryId = Number.isFinite(stored) ? stored : 0
+}
+
+function storeUploadCursor(entryId: number): void {
+  lastUploadedEntryId = Math.max(lastUploadedEntryId, entryId)
+  const storage = getStorage()
+  try {
+    storage?.setItem(UPLOAD_CURSOR_KEY, String(lastUploadedEntryId))
+  } catch {
+    storageAvailable = false
   }
 }
 
@@ -242,6 +273,82 @@ function schedulePersist(immediate = false): void {
   persistTimer = window.setTimeout(() => persistNow(), PERSIST_DEBOUNCE_MS)
 }
 
+function pendingUploadEntries(): NeonDiagnosticEntry[] {
+  loadStoredEntries()
+  loadUploadCursor()
+  return entries.filter((entry) => entry.id > lastUploadedEntryId).slice(-MAX_UPLOAD_ENTRIES)
+}
+
+function uploadPayload(reason: string, uploadEntries: NeonDiagnosticEntry[]): string {
+  return JSON.stringify({
+    version: 1,
+    reason,
+    generatedAt: new Date().toISOString(),
+    session,
+    currentEnvironment: captureEnvironment(),
+    entries: uploadEntries,
+    summary: {
+      totalEntries: entries.length,
+      uploadedEntries: uploadEntries.length,
+      levelCounts: levelCountsFor(entries),
+      droppedEntries,
+      storageAvailable: getStorage() !== null,
+      maxEntries: MAX_ENTRIES,
+    },
+  })
+}
+
+async function uploadNow(reason = 'scheduled', preferBeacon = false): Promise<boolean> {
+  if (uploadInFlight || !canUseBrowser()) return false
+  const endpoint = diagnosticsEndpoint()
+  if (!endpoint) return false
+  const uploadEntries = pendingUploadEntries()
+  if (uploadEntries.length === 0) return true
+
+  const maxEntryId = uploadEntries[uploadEntries.length - 1]?.id ?? lastUploadedEntryId
+  const body = uploadPayload(reason, uploadEntries)
+
+  if (preferBeacon && typeof navigator.sendBeacon === 'function') {
+    const sent = navigator.sendBeacon(endpoint, new Blob([body], { type: 'application/json' }))
+    if (sent) storeUploadCursor(maxEntryId)
+    return sent
+  }
+
+  uploadInFlight = true
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      keepalive: reason === 'pagehide' || reason === 'visibility_hidden',
+    })
+    if (!response.ok) return false
+    storeUploadCursor(maxEntryId)
+    return true
+  } catch {
+    return false
+  } finally {
+    uploadInFlight = false
+  }
+}
+
+function scheduleUpload(immediate = false): void {
+  if (!diagnosticsEndpoint() || !canUseBrowser()) return
+  if (immediate) {
+    if (uploadTimer !== null) {
+      window.clearTimeout(uploadTimer)
+      uploadTimer = null
+    }
+    void uploadNow('immediate')
+    return
+  }
+  if (uploadTimer !== null) return
+  uploadTimer = window.setTimeout(() => {
+    uploadTimer = null
+    void uploadNow('scheduled')
+  }, UPLOAD_DEBOUNCE_MS)
+}
+
 function trimEntries(): void {
   if (entries.length <= MAX_ENTRIES) return
   const overflow = entries.length - MAX_ENTRIES
@@ -254,6 +361,7 @@ function pushEntry(entry: NeonDiagnosticEntry): void {
   entries.push(entry)
   trimEntries()
   schedulePersist(entry.level !== 'info')
+  scheduleUpload(entry.level !== 'info')
 }
 
 function sanitizeString(value: string): string {
@@ -413,7 +521,10 @@ function installGlobalHandlers(): void {
     log('info', 'lifecycle', 'visibility_change', {
       visibilityState: document.visibilityState,
     })
-    if (document.visibilityState === 'hidden') persistNow()
+    if (document.visibilityState === 'hidden') {
+      persistNow()
+      void uploadNow('visibility_hidden', true)
+    }
   })
 
   window.addEventListener('pagehide', (event) => {
@@ -422,6 +533,7 @@ function installGlobalHandlers(): void {
       visibilityState: document.visibilityState,
     })
     persistNow()
+    void uploadNow('pagehide', true)
   })
 
   window.addEventListener('pageshow', (event) => {
@@ -496,9 +608,16 @@ function clear(): void {
   entries = []
   droppedEntries = 0
   nextEntryId = 1
+  lastUploadedEntryId = 0
+  uploadCursorLoaded = true
+  if (uploadTimer !== null && canUseBrowser()) {
+    window.clearTimeout(uploadTimer)
+    uploadTimer = null
+  }
   const storage = getStorage()
   try {
     storage?.removeItem(NEON_DIAGNOSTICS_STORAGE_KEY)
+    storage?.removeItem(UPLOAD_CURSOR_KEY)
   } catch {
     storageAvailable = false
   }
@@ -581,6 +700,7 @@ export const neonDiagnostics = {
   exportText,
   copyToClipboard,
   clear,
+  flushRemote: () => uploadNow('manual'),
   forceFlush,
   recordFrame,
   formatError: formatDiagnosticError,
