@@ -329,8 +329,9 @@ test('plays s&box menu feedback cues', async ({ page }) => {
 test('exposes source-authored tracks except Neon Oval as playable tracks', async ({ page }) => {
   await goToGame(page)
   await expect(page.locator('.menu-meta')).toContainText('Tutorial Circuit')
-  await expect(page.locator('.track-option')).toHaveCount(10)
+  await expect(page.locator('.track-option')).toHaveCount(11)
   await expect(page.getByRole('button', { name: /Tutorial Circuit/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Debug Circuit/ })).toBeVisible()
   await expect(page.getByRole('button', { name: /Inversion Ribbon/ })).toBeVisible()
   await expect(page.getByRole('button', { name: /Vortex Gauntlet/ })).toBeVisible()
   await expect(page.getByRole('button', { name: /Neon Oval/ })).toHaveCount(0)
