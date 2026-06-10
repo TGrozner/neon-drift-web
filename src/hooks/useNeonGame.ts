@@ -3,6 +3,7 @@ import { FIXED_DT, MAX_ACCUMULATED_TIME, type ShipProfileId } from '../../shared
 import { type VehicleInput } from '../../shared/physics'
 import {
   createRaceState,
+  getPlayer,
   goToMenu,
   startRace,
   updateRace,
@@ -65,6 +66,7 @@ const STEER_RIGHT = -1
 const REACT_PUBLISH_INTERVAL_MS = 50
 const LARGE_FRAME_GAP_SECONDS = 0.2
 const LARGE_FRAME_GAP_LOG_COOLDOWN_MS = 5_000
+const TOUCH_COMMAND_LOG_COOLDOWN_MS = 1_000
 const clampInput = (value: number): number => clamp(value, -1, 1)
 
 const shouldPublishInputDebug = (): boolean =>
@@ -120,6 +122,29 @@ const mergeInput = (keyboard: KeyState, touch: KeyState): VehicleInput => ({
   reset: keyboard.reset || touch.reset,
 })
 
+const compactRaceDiagnostics = (race: RaceState) => {
+  const player = getPlayer(race)
+  return {
+    phase: race.phase,
+    track: race.track.id,
+    raceTime: Math.round(race.raceTime * 10) / 10,
+    lap: player.lap,
+    position: player.finalPosition || Math.max(1, race.standings.findIndex((vehicle) => vehicle.id === player.id) + 1),
+    finished: player.finished,
+    eliminated: player.eliminated,
+    integrityPct: Math.round(player.integrity * 100),
+    powerPct: Math.round(player.power * 100),
+    crashOutCount: player.crashOutCount,
+    maxSpeedKmh: Math.round(race.runStats.maxSpeed * 3.6),
+    contactCount: race.runStats.contactCount,
+    damagePct: Math.round(race.runStats.integrityDamageTaken * 100),
+    offTrackSeconds: Math.round(race.runStats.offTrackSeconds * 10) / 10,
+    draftSeconds: Math.round(race.runStats.draftSeconds * 10) / 10,
+    boostStarts: race.runStats.boostStarts,
+    airbrakeExits: race.runStats.airbrakeExits,
+  }
+}
+
 export const useNeonGame = () => {
   const [view, setView] = useState(() => ({ race: createRaceState(), version: 0 }))
   const raceRef = useRef<RaceState>(view.race)
@@ -130,6 +155,13 @@ export const useNeonGame = () => {
   const nextPublishTimeRef = useRef(0)
   const lastPublishedPhaseRef = useRef(view.race.phase)
   const lastLargeFrameGapLogRef = useRef(0)
+  const lastTouchCommandLogRef = useRef<Record<TouchCommand, number>>({
+    left: 0,
+    right: 0,
+    throttle: 0,
+    boost: 0,
+    airbrake: 0,
+  })
 
   useEffect(() => {
     const clearInputState = () => {
@@ -206,12 +238,15 @@ export const useNeonGame = () => {
       const previousPhase = lastPublishedPhaseRef.current
       const phaseChanged = raceRef.current.phase !== previousPhase
       if (phaseChanged) {
+        const raceSnapshot = compactRaceDiagnostics(raceRef.current)
         neonDiagnostics.log('race', 'phase_change', {
           from: previousPhase,
           to: raceRef.current.phase,
-          track: raceRef.current.track.id,
-          raceTime: Math.round(raceRef.current.raceTime * 10) / 10,
+          ...raceSnapshot,
         })
+        if (raceRef.current.phase === 'finished' || raceRef.current.phase === 'results') {
+          neonDiagnostics.log('race', 'summary', raceSnapshot)
+        }
       }
       if (stepped && (phaseChanged || time >= nextPublishTimeRef.current)) {
         lastPublishedPhaseRef.current = raceRef.current.phase
@@ -243,6 +278,17 @@ export const useNeonGame = () => {
 
   const setTouch = useCallback((command: TouchCommand, active: boolean) => {
     applyTouchCommand(touchRef.current, command, active)
+    if (active) {
+      const now = performance.now()
+      if (now - lastTouchCommandLogRef.current[command] >= TOUCH_COMMAND_LOG_COOLDOWN_MS) {
+        lastTouchCommandLogRef.current[command] = now
+        neonDiagnostics.log('input', 'touch_command', {
+          command,
+          phase: raceRef.current.phase,
+          track: raceRef.current.track.id,
+        })
+      }
+    }
     publishInputDebug(pressedKeysRef.current, touchRef.current)
   }, [])
 
