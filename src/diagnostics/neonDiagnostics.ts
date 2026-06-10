@@ -127,6 +127,16 @@ function canUseBrowser(): boolean {
   return typeof window !== 'undefined' && typeof document !== 'undefined'
 }
 
+function matchesMedia(query: string): boolean {
+  if (!canUseBrowser() || typeof window.matchMedia !== 'function') return false
+
+  try {
+    return window.matchMedia(query).matches === true
+  } catch {
+    return false
+  }
+}
+
 function nowMs(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now()
 }
@@ -348,7 +358,7 @@ function captureEnvironment(): DiagnosticPayload {
         }
       : null,
     visibilityState: document.visibilityState,
-    standalone: Boolean(nav.standalone) || window.matchMedia('(display-mode: standalone)').matches,
+    standalone: Boolean(nav.standalone) || matchesMedia('(display-mode: standalone)'),
     localStorageAvailable: getStorage() !== null,
   }
 }

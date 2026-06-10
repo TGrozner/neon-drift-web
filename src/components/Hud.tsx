@@ -50,6 +50,12 @@ const formatTime = (seconds: number): string => {
 }
 
 const formatSpeed = (speed: number): string => `${Math.round(speed * 3.6).toString().padStart(3, '0')}`
+const EVENT_BADGE_LIMIT = 3
+
+type EventBadge = {
+  label: string
+  warning?: boolean
+}
 
 export function Hud({ race }: Props) {
   if (race.phase === 'menu' || race.phase === 'results') return null
@@ -82,6 +88,23 @@ export function Hud({ race }: Props) {
   const raceTime = race.phase === 'racing' || race.phase === 'finished'
     ? race.raceTime + player.timePenalty
     : 0
+  const launchChargePct = Math.round(player.launchBoostCharge * 100)
+  const launchChargeVisible = race.phase === 'countdown' && player.launchBoostCharge > 0.02
+  const eventBadges: EventBadge[] = [
+    player.crashOutPulse > 0 ? { label: 'CRASH OUT', warning: true } : null,
+    player.telemetry.integrityCritical ? { label: 'INTEGRITY CRITICAL', warning: true } : null,
+    player.telemetry.wrongWay ? { label: 'WRONG WAY', warning: true } : null,
+    player.telemetry.offTrack ? { label: 'TRACK LIMIT', warning: true } : null,
+    player.telemetry.railPressure > 0.35 ? { label: 'RAIL PRESSURE', warning: true } : null,
+    player.powerDamagePulse > 0.05 ? { label: 'INTEGRITY HIT', warning: player.telemetry.integrityCritical } : null,
+    player.packBumpPulse > 0.05 ? { label: 'CONTACT' } : null,
+    player.knockoutRewardPulse > 0.05 ? { label: 'KO ENERGY' } : null,
+    player.airbrakeExitPulse > 0 ? { label: 'EXIT BOOST' } : null,
+    player.isBoosting ? { label: 'BOOST' } : null,
+    player.slipstreamPulse > 0.05 ? { label: 'DRAFT' } : null,
+    player.cleanLinePulse > 0.3 ? { label: 'CLEAN LINE' } : null,
+    player.isAirbraking ? { label: 'AIRBRAKE' } : null,
+  ].filter((badge): badge is EventBadge => Boolean(badge)).slice(0, EVENT_BADGE_LIMIT)
 
   return (
     <div className="hud" data-testid="hud">
@@ -147,6 +170,13 @@ export function Hud({ race }: Props) {
           <span style={{ width: `${lineSafety * 100}%` }} />
           <span style={{ width: `${draft * 100}%` }} />
         </div>
+        {launchChargeVisible && (
+          <div className="mobile-launch-charge" data-testid="mobile-launch-charge">
+            <span>LAUNCH</span>
+            <strong>{launchChargePct}%</strong>
+            <div className="meter"><span style={{ width: `${player.launchBoostCharge * 100}%` }} /></div>
+          </div>
+        )}
       </div>
 
       <div className="hud-panel readability">
@@ -200,20 +230,20 @@ export function Hud({ race }: Props) {
       )}
 
       <div className="event-strip">
-        {player.telemetry.offTrack && <span className="warning">TRACK LIMIT</span>}
-        {player.telemetry.railPressure > 0.35 && <span className="warning">RAIL PRESSURE</span>}
-        {player.telemetry.wrongWay && <span className="warning">WRONG WAY</span>}
-        {player.isAirbraking && <span>AIRBRAKE</span>}
-        {player.airbrakeExitPulse > 0 && <span>EXIT BOOST</span>}
-        {player.isBoosting && <span>BOOST</span>}
-        {player.slipstreamPulse > 0.05 && <span>DRAFT</span>}
-        {player.cleanLinePulse > 0.3 && <span>CLEAN LINE</span>}
-        {player.knockoutRewardPulse > 0.05 && <span>KO ENERGY</span>}
-        {player.packBumpPulse > 0.05 && <span>CONTACT</span>}
-        {player.powerDamagePulse > 0.05 && <span className={player.telemetry.integrityCritical ? 'warning' : ''}>INTEGRITY HIT</span>}
-        {player.telemetry.integrityCritical && <span className="warning">INTEGRITY CRITICAL</span>}
-        {player.crashOutPulse > 0 && <span className="warning">CRASH OUT</span>}
+        {eventBadges.map((badge) => (
+          <span className={badge.warning ? 'warning' : undefined} key={badge.label}>{badge.label}</span>
+        ))}
       </div>
+
+      {launchChargeVisible && (
+        <div className="launch-charge" data-testid="launch-charge">
+          <span>LAUNCH CHARGE</span>
+          <strong>{launchChargePct}%</strong>
+          <div className="meter">
+            <span style={{ width: `${player.launchBoostCharge * 100}%` }} />
+          </div>
+        </div>
+      )}
 
       <div className="airbrake-charge">
         <span>AIRBRAKE CHARGE</span>

@@ -89,11 +89,11 @@ jobs:
       matrix:
         include:
           - shard: menu-tutorial
-            grep: 'lays out|plays s&box|replays the tutorial'
+            grep: 'lays out|plays s&box|replays the tutorial|exposes source-authored|shows mobile-specific'
           - shard: controls
-            grep: 'mobile event strip|simplified mobile|clears held keyboard'
+            grep: 'mobile setup|mobile event strip|simplified mobile|clears held keyboard'
           - shard: race-render-audio
-            grep: 'playable 3D race|source-authored stunt|race audio'
+            grep: 'opt-in run telemetry|playable 3D race|source-authored stunt|race audio'
     steps:
       - name: Checkout
         uses: actions/checkout@v6

@@ -17,6 +17,7 @@ import {
 import { ALL_TRACKS, TRACK_GEOMETRY_SMOOTHING, TUTORIAL_CIRCUIT, TRACKS, trackToWorld } from '../shared/track'
 import { travelYawForVehicle, visualYawForVehicle } from '../shared/vehicleVisuals'
 import { NeonAudioEngine } from '../src/audio/neonAudio'
+import { Hud } from '../src/components/Hud'
 import { RaceOverlay } from '../src/components/RaceOverlay'
 import { TelemetryCockpit } from '../src/components/TelemetryCockpit'
 import { TouchControls } from '../src/components/TouchControls'
@@ -864,6 +865,43 @@ describe('race flow', () => {
     window.history.pushState({}, '', '/?debug=telemetry')
     render(createElement(TelemetryCockpit, { race }))
     expect(screen.getByTestId('telemetry-cockpit').textContent).toContain('RUN TELEMETRY')
+  })
+
+  it('shows launch charge during countdown only', () => {
+    const race = startRace('balanced')
+    const launchInput = { throttle: 1, steer: 0, boost: false, airbrake: false, reset: false }
+    updateRace(race, launchInput, 0.5)
+    updateRace(race, launchInput, 0.5)
+    expect(race.phase).toBe('countdown')
+    expect(getPlayer(race).launchBoostCharge).toBeGreaterThan(0)
+
+    const { rerender } = render(createElement(Hud, { race }))
+    expect(screen.getByTestId('launch-charge').textContent).toContain('LAUNCH CHARGE')
+
+    updateRace(race, launchInput, 2.6)
+    expect(race.phase).toBe('racing')
+    rerender(createElement(Hud, { race }))
+    expect(screen.queryByTestId('launch-charge')).toBeNull()
+  })
+
+  it('caps event-strip badges and keeps critical warnings first', () => {
+    const race = startRace('balanced')
+    race.phase = 'racing'
+    const player = getPlayer(race)
+    player.crashOutPulse = 1
+    player.telemetry.integrityCritical = true
+    player.telemetry.wrongWay = true
+    player.telemetry.offTrack = true
+    player.telemetry.railPressure = 0.8
+    player.powerDamagePulse = 1
+    player.packBumpPulse = 1
+    player.isBoosting = true
+    player.slipstreamPulse = 1
+
+    const { container } = render(createElement(Hud, { race }))
+    const labels = [...container.querySelectorAll('.event-strip span')].map((node) => node.textContent)
+
+    expect(labels).toEqual(['CRASH OUT', 'INTEGRITY CRITICAL', 'WRONG WAY'])
   })
 
   it('tracks nearest rivals around the player instead of only the leaders', () => {
