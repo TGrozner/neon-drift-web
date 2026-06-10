@@ -138,7 +138,10 @@ describe('track and pads', () => {
       .map((track) => track.id)
       .filter((id) => id !== 'neon-oval')
 
-    expect(TRACKS.map((track) => track.id)).toEqual(expectedPlayableTrackIds)
+    expect(TRACKS.map((track) => track.id)).toEqual([
+      ...expectedPlayableTrackIds.filter((id) => id !== 'tutorial-debug-circuit'),
+      'tutorial-debug-circuit',
+    ])
     expect(TRACKS[0]).toBe(TUTORIAL_CIRCUIT)
     expect(TRACKS.some((track) => track.id === 'neon-oval')).toBe(false)
     expect(TRACKS.some((track) => track.id === 'inversion-ribbon')).toBe(true)
