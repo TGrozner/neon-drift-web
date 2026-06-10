@@ -12,6 +12,7 @@ import {
 import { clamp, finiteOr } from '../../shared/math'
 import type { TrackId } from '../../shared/track'
 import { neonDiagnostics } from '../diagnostics/neonDiagnostics'
+import { runAssessment, statCardsFor } from '../components/raceStatsView'
 
 type KeyState = {
   throttle: number
@@ -145,6 +146,63 @@ const compactRaceDiagnostics = (race: RaceState) => {
   }
 }
 
+const roundNumber = (value: number, digits = 2): number => {
+  if (!Number.isFinite(value)) return 0
+  return Number(value.toFixed(digits))
+}
+
+const buildRaceResultSummary = (race: RaceState) => {
+  const player = getPlayer(race)
+  const playerPosition = Math.max(1, race.standings.findIndex((vehicle) => vehicle.id === player.id) + 1)
+  const leaderBoard = race.standings.slice(0, Math.min(8, race.standings.length)).map((vehicle, index) => ({
+    position: index + 1,
+    id: vehicle.id,
+    name: vehicle.name,
+    finished: vehicle.finished,
+    eliminated: vehicle.eliminated,
+    lap: vehicle.lap,
+    finishTime: vehicle.finished ? roundNumber(vehicle.finishTime, 2) : null,
+    bestLapSeconds: roundNumber(vehicle.bestLapSeconds, 2),
+    penaltySeconds: roundNumber(vehicle.timePenalty, 2),
+  }))
+  const cards = statCardsFor(race.runStats).slice(0, 8)
+  const avgSpeedKmh = roundNumber((race.runStats.sampleSeconds > 0 ? race.runStats.speedSeconds / race.runStats.sampleSeconds : 0) * 3.6, 0)
+
+  return {
+    track: race.track.id,
+    trackName: race.track.name,
+    phase: race.phase,
+    totalLaps: race.totalLaps,
+    raceSeconds: roundNumber(race.raceTime + player.timePenalty, 1),
+    playerId: player.id,
+    playerName: player.name,
+    playerPosition,
+    playerStatus: player.eliminated ? 'out' : player.finished ? 'finished' : 'dnf',
+    playerLap: player.lap,
+    playerFinishTime: player.finished ? roundNumber(player.finishTime, 2) : null,
+    playerBestLap: roundNumber(player.bestLapSeconds, 2),
+    finalIntegrity: roundNumber(player.integrity * 100),
+    finalPower: roundNumber(player.power * 100),
+    crashOuts: player.crashOutCount,
+    displayCards: cards,
+    assessment: runAssessment(race.runStats, player.eliminated),
+    runStats: {
+      avgSpeedKmh,
+      maxSpeedKmh: roundNumber(race.runStats.maxSpeed * 3.6, 0),
+      contactCount: race.runStats.contactCount,
+      boostStarts: race.runStats.boostStarts,
+      airbrakeExits: race.runStats.airbrakeExits,
+      draftSeconds: roundNumber(race.runStats.draftSeconds, 1),
+      offTrackSeconds: roundNumber(race.runStats.offTrackSeconds, 1),
+      wrongWaySeconds: roundNumber(race.runStats.wrongWaySeconds, 1),
+      cleanLineRatio: roundNumber(race.runStats.sampleSeconds > 0 ? race.runStats.cleanLineSeconds / race.runStats.sampleSeconds : 0, 3),
+      rivalPasses: race.runStats.rivalPasses,
+      resets: race.runStats.resetCount,
+    },
+    leaderBoard,
+  }
+}
+
 export const useNeonGame = () => {
   const [view, setView] = useState(() => ({ race: createRaceState(), version: 0 }))
   const raceRef = useRef<RaceState>(view.race)
@@ -245,6 +303,9 @@ export const useNeonGame = () => {
           ...raceSnapshot,
         })
         if (raceRef.current.phase === 'finished' || raceRef.current.phase === 'results') {
+          if (raceRef.current.phase === 'results') {
+            neonDiagnostics.log('race', 'results_summary', buildRaceResultSummary(raceRef.current))
+          }
           neonDiagnostics.log('race', 'summary', raceSnapshot)
         }
       }
