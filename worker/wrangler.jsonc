@@ -1,0 +1,15 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "neon-drift-diagnostics",
+  "main": "./diagnostics-collector.ts",
+  "compatibility_date": "2026-06-10",
+  "kv_namespaces": [
+    {
+      "binding": "LOGS"
+    }
+  ],
+  "vars": {
+    "ALLOWED_ORIGINS": "https://tgrozner.github.io",
+    "LOG_RETENTION_DAYS": "45"
+  }
+}

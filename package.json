@@ -12,6 +12,10 @@
     "build:client": "vite build",
     "e2e": "playwright test",
     "lint": "eslint .",
+    "logs:prod": "node scripts/read-diagnostics.mjs",
+    "logs:worker:deploy": "npx wrangler deploy --config worker/wrangler.jsonc --keep-vars",
+    "logs:worker:dev": "npx wrangler dev --config worker/wrangler.jsonc",
+    "logs:worker:tail": "npx wrangler tail --config worker/wrangler.jsonc",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -76,6 +76,52 @@ application/json` from the Pages origin. The client uploads pending diagnostics
 silently on a debounce, immediately for warnings/errors, and again with
 `sendBeacon` when the page is hidden or closed.
 
+This repository includes a Cloudflare Worker collector in `worker/`. It stores
+uploads in Workers KV by session and exposes read endpoints protected by the
+Cloudflare secret `READ_TOKEN`.
+
+One-time collector setup:
+
+```bash
+wrangler login
+npm run logs:worker:deploy
+wrangler secret put READ_TOKEN --config worker/wrangler.jsonc
+gh variable set VITE_DIAGNOSTICS_ENDPOINT --repo TGrozner/neon-drift-web --body "https://neon-drift-diagnostics.<your-workers-subdomain>.workers.dev/collect"
+```
+
+For GitHub Actions deployment of the collector, add these repository secrets:
+
+```text
+CLOUDFLARE_API_TOKEN
+CLOUDFLARE_ACCOUNT_ID
+DIAGNOSTICS_READ_TOKEN
+```
+
+Then enable automatic Worker deployment from `main`:
+
+```bash
+gh variable set ENABLE_DIAGNOSTICS_WORKER_DEPLOY --repo TGrozner/neon-drift-web --body true
+```
+
+After the Worker is deployed and `VITE_DIAGNOSTICS_ENDPOINT` is set, push or
+rerun the Pages workflow so the static game build contains the endpoint.
+
+Read production logs locally with:
+
+```bash
+DIAGNOSTICS_ENDPOINT=https://neon-drift-diagnostics.<your-workers-subdomain>.workers.dev/collect \
+DIAGNOSTICS_READ_TOKEN=<read-token> \
+npm run logs:prod
+```
+
+Fetch one session's raw batches with:
+
+```bash
+DIAGNOSTICS_ENDPOINT=https://neon-drift-diagnostics.<your-workers-subdomain>.workers.dev/collect \
+DIAGNOSTICS_READ_TOKEN=<read-token> \
+npm run logs:prod -- session <session-id>
+```
+
 The same report is available from DevTools with:
 
 ```js
