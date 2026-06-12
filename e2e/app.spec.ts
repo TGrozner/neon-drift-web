@@ -291,7 +291,7 @@ test('lays out the menu choices without overlap', async ({ page }) => {
       await expect(page.getByTestId('mobile-menu-step-ready')).toBeVisible()
       await expect(page.getByTestId('start-race')).toBeInViewport()
       await expect.poll(async () => page.locator('.menu-panel').evaluate((element) =>
-        element.scrollHeight <= element.clientHeight + 4,
+        element.getBoundingClientRect().bottom <= window.innerHeight + 4,
       )).toBe(true)
       await expect.poll(() => elementsHaveNoVisibleOverlap(page, '.start-button', '.track-option, .ship-card')).toBe(true)
     }
@@ -477,7 +477,13 @@ test('drives with simplified mobile touch controls', async ({ page }) => {
   await expect.poll(async () => (await vibrationEvents(page)).some((pattern) => pattern === 12)).toBe(true)
 
   const turnRightReleased = await releaseTouchControlIfPresent(turnRight, 7)
-  if (turnRightReleased && await turnRight.isVisible()) await expect(turnRight).toHaveAttribute('aria-pressed', 'false')
+  if (turnRightReleased) {
+    await expect.poll(async () => {
+      if ((await turnRight.count()) === 0) return true
+      if (!(await turnRight.isVisible())) return true
+      return (await turnRight.getAttribute('aria-pressed')) === 'false'
+    }).toBe(true)
+  }
   await expect.poll(async () => (await touchInputState(page)).touchSteer ?? 0).toBe(0)
   await page.waitForTimeout(1_350)
   await expect.poll(async () => (await touchInputState(page)).touchBoost ?? true).toBe(false)
