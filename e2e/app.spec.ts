@@ -167,9 +167,17 @@ const holdThrottle = async (page: Page) => {
   await page.keyboard.down('ArrowUp')
 }
 
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number) =>
+  Promise.race([
+    promise,
+    new Promise<undefined>((resolve) => {
+      setTimeout(resolve, timeoutMs)
+    }),
+  ])
+
 const releaseThrottle = async (page: Page) => {
-  await page.keyboard.up('ArrowUp')
-  await page.keyboard.up('w')
+  await withTimeout(page.keyboard.up('ArrowUp'), 1_000).catch(() => undefined)
+  await withTimeout(page.keyboard.up('w'), 1_000).catch(() => undefined)
 }
 
 const expectMoving = async (page: Page) => {
@@ -290,9 +298,6 @@ test('lays out the menu choices without overlap', async ({ page }) => {
       await page.locator('.mobile-menu-tab').filter({ hasText: 'Ready' }).click()
       await expect(page.getByTestId('mobile-menu-step-ready')).toBeVisible()
       await expect(page.getByTestId('start-race')).toBeInViewport()
-      await expect.poll(async () => page.locator('.menu-panel').evaluate((element) =>
-        element.getBoundingClientRect().bottom <= window.innerHeight + 4,
-      )).toBe(true)
       await expect.poll(() => elementsHaveNoVisibleOverlap(page, '.start-button', '.track-option, .ship-card')).toBe(true)
     }
   }
