@@ -113,7 +113,7 @@ export const createRaceRunStats = (): RaceRunStats => ({
 
 export const createRaceState = (
   profileId: ShipProfileId = 'balanced',
-  trackId: TrackId = 'tutorial-circuit',
+  trackId: TrackId = 'vortex-gauntlet',
 ): RaceState => {
   const track = trackById(trackId)
   const totalLaps = trackId === 'tutorial-debug-circuit' ? 1 : RACE.totalLaps
@@ -172,7 +172,7 @@ export const createRaceState = (
 export const getPlayer = (race: RaceState): Vehicle =>
   race.vehicles.find((vehicle) => vehicle.id === race.playerId) ?? race.vehicles[0]
 
-export const startRace = (profileId: ShipProfileId, trackId: TrackId = 'tutorial-circuit'): RaceState => {
+export const startRace = (profileId: ShipProfileId, trackId: TrackId = 'vortex-gauntlet'): RaceState => {
   const fresh = createRaceState(profileId, trackId)
   fresh.phase = 'warmup'
   setToast(fresh, 'READY')

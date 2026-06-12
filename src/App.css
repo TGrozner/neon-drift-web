@@ -1135,6 +1135,28 @@
     line-height: 1.18;
   }
 
+  .mobile-ready-step {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .mobile-ready-step > span {
+    grid-column: 1 / -1;
+  }
+
+  .mobile-ready-card {
+    min-width: 0;
+    padding: 8px;
+  }
+
+  .mobile-ready-card strong {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .desktop-start-button {
     position: static;
   }

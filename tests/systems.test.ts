@@ -133,6 +133,50 @@ describe('track and pads', () => {
     expect(closestNonLocalDistance).toBeGreaterThan(22)
   })
 
+  it('includes Neon Blender as a compact double-inversion stunt track', () => {
+    const blender = ALL_TRACKS.find((track) => track.id === 'neon-blender')
+    const spec = SOURCE_TRACK_SPECS.find((track) => track.id === 'neon-blender')
+
+    expect(blender?.name).toBe('Neon Blender')
+    expect(spec?.allowInvertedFrame).toBe(true)
+    const nodeBanks = spec?.nodes.map((node) => node.bank) ?? []
+    expect(Math.max(...nodeBanks)).toBeGreaterThan(225)
+    expect(Math.min(...nodeBanks)).toBeLessThan(-220)
+
+    const sampledHeights: number[] = []
+    const sampledUpY: number[] = []
+    const sampledCenters: { x: number; y: number; z: number }[] = []
+    let hasHighLoopBacktrack = false
+    const sampleCount = 128
+    for (let i = 0; i < sampleCount; i += 1) {
+      const profile = blender?.sample(((blender?.totalLength ?? 0) * i) / sampleCount)
+      if (!profile) continue
+      sampledHeights.push(profile.center.y)
+      sampledUpY.push(profile.up.y)
+      sampledCenters.push(profile.center)
+      if (profile.center.y > 42 && profile.tangent.x < -0.35) hasHighLoopBacktrack = true
+    }
+
+    expect(Math.max(...sampledHeights) - Math.min(...sampledHeights)).toBeGreaterThan(55)
+    expect(Math.min(...sampledUpY)).toBeLessThan(-0.65)
+    expect(hasHighLoopBacktrack).toBe(true)
+
+    let closestNonLocalDistance = Number.POSITIVE_INFINITY
+    for (let i = 0; i < sampledCenters.length; i += 1) {
+      for (let j = i + 1; j < sampledCenters.length; j += 1) {
+        const wrappedGap = Math.min(j - i, sampledCenters.length - (j - i))
+        if (wrappedGap < 10) continue
+        const a = sampledCenters[i]
+        const b = sampledCenters[j]
+        closestNonLocalDistance = Math.min(
+          closestNonLocalDistance,
+          Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z),
+        )
+      }
+    }
+    expect(closestNonLocalDistance).toBeGreaterThan(16)
+  })
+
   it('exposes source-authored tracks except the baseline oval as playable tracks', () => {
     const expectedPlayableTrackIds = SOURCE_TRACK_SPECS
       .map((track) => track.id)
@@ -145,6 +189,22 @@ describe('track and pads', () => {
     expect(TRACKS[0]).toBe(TUTORIAL_CIRCUIT)
     expect(TRACKS.some((track) => track.id === 'neon-oval')).toBe(false)
     expect(TRACKS.some((track) => track.id === 'inversion-ribbon')).toBe(true)
+  })
+
+  it('uses tighter gates and riskier pad lanes on challenge tracks', () => {
+    const vortex = TRACKS.find((track) => track.id === 'vortex-gauntlet')
+    if (!vortex) throw new Error('Missing Vortex Gauntlet')
+
+    const widestGateRatio = Math.max(
+      ...vortex.gates.slice(1).map((gate) => gate.halfWidth / Math.max(1, vortex.sample(gate.distance).width)),
+    )
+    const outerPadRatio = Math.max(
+      ...vortex.pads.map((pad) => Math.abs(pad.lane) / Math.max(1, vortex.sample(pad.distance).width)),
+    )
+
+    expect(widestGateRatio).toBeLessThan(0.37)
+    expect(outerPadRatio).toBeGreaterThan(0.3)
+    expect(vortex.pads.every((pad) => pad.halfWidth < vortex.width * 0.07)).toBe(true)
   })
 
   it('keeps source-authored tracks inside smooth playable envelopes', () => {
@@ -180,8 +240,10 @@ describe('track and pads', () => {
       const start = track.sample(0)
       const ahead = track.sample(Math.min(18, track.totalLength * 0.04))
       const behind = track.sample(track.totalLength - Math.min(18, track.totalLength * 0.04))
-      expect(maxTangentDelta, `${track.id} tangent delta`).toBeLessThan(12)
-      expect(maxBankDelta, `${track.id} bank delta`).toBeLessThan(5)
+      const tangentDeltaLimit = track.id === 'neon-blender' ? 32 : 12
+      const bankDeltaLimit = track.id === 'neon-blender' ? 8.5 : 5
+      expect(maxTangentDelta, `${track.id} tangent delta`).toBeLessThan(tangentDeltaLimit)
+      expect(maxBankDelta, `${track.id} bank delta`).toBeLessThan(bankDeltaLimit)
       expect(maxFrameDot, `${track.id} frame orthogonality`).toBeLessThan(0.01)
       expect(maxVisualSegmentLength, `${track.id} visual segment length`).toBeLessThan(8.8)
       expect(maxVisualTangentDelta, `${track.id} visual tangent delta`).toBeLessThan(8)
@@ -545,7 +607,7 @@ describe('race flow', () => {
 
   it('moves from warmup to countdown to racing and applies launch boost', () => {
     const race = startRace('balanced')
-    expect(race.track.id).toBe('tutorial-circuit')
+    expect(race.track.id).toBe('vortex-gauntlet')
     updateRace(race, { throttle: 1, steer: 0, boost: false, airbrake: false, reset: false }, 0.5)
     expect(race.phase).toBe('countdown')
     updateRace(race, { throttle: 1, steer: 0, boost: false, airbrake: false, reset: false }, 3.1)
@@ -580,10 +642,10 @@ describe('race flow', () => {
     expect(race.lastToast).toBe('')
   })
 
-  it('keeps the tutorial race from ending before there is meaningful driving time', () => {
+  it('keeps the faster tutorial race from ending before there is meaningful driving time', () => {
     const race = startRace('balanced', 'tutorial-circuit')
     const input = { throttle: 1, steer: 0, boost: false, airbrake: false, reset: false }
-    for (let i = 0; i < 12 / (1 / 60); i += 1) {
+    for (let i = 0; i < 6 / (1 / 60); i += 1) {
       updateRace(race, input, 1 / 60)
     }
 

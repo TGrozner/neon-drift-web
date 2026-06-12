@@ -16,23 +16,36 @@ export type SourceTrackSpec = {
 }
 
 const makeTutorialCircuitNodes = (): SourceTrackNode[] => {
-  const width = 1500
-  const radius = 4200
-  const straight = 24000
+  const width = 1120
+  const radius = 3400
+  const straight = 15000
   const nodes: SourceTrackNode[] = []
   const add = (x: number, y: number, bank = 0) => nodes.push({ x, y, z: 0, width, bank })
 
-  for (const x of [0, 6000, 12000, 18000, straight]) add(x, -radius)
+  add(0, -radius)
+  add(3600, -radius)
+  add(6200, -radius + 880, -10)
+  add(8800, -radius - 920, 12)
+  add(11800, -radius, -6)
+  add(straight, -radius)
   for (let step = 1; step <= 8; step += 1) {
     const angle = -Math.PI / 2 + (Math.PI * step) / 8
-    add(straight + Math.cos(angle) * radius, Math.sin(angle) * radius, 8)
+    add(straight + Math.cos(angle) * radius, Math.sin(angle) * radius, 13)
   }
-  for (const x of [18000, 12000, 6000, 0, -6000, -12000, -18000, -straight]) add(x, radius)
+  add(11800, radius)
+  add(9000, radius + 780, 10)
+  add(6200, radius - 960, -14)
+  add(3200, radius + 820, 12)
+  add(0, radius)
+  add(-3600, radius - 900, -14)
+  add(-7200, radius + 920, 14)
+  add(-11000, radius)
+  add(-straight, radius)
   for (let step = 1; step <= 8; step += 1) {
     const angle = Math.PI / 2 + (Math.PI * step) / 8
-    add(-straight + Math.cos(angle) * radius, Math.sin(angle) * radius, -8)
+    add(-straight + Math.cos(angle) * radius, Math.sin(angle) * radius, -13)
   }
-  for (const x of [-18000, -12000, -6000]) add(x, -radius)
+  for (const x of [-11800, -7200, -3600]) add(x, -radius)
   return nodes
 }
 
@@ -81,6 +94,61 @@ const makeVortexGauntletNodes = (): SourceTrackNode[] => {
   }))
 }
 
+const makeNeonBlenderNodes = (): SourceTrackNode[] => {
+  const scale = 82
+  const heightScale = 2.9
+  const values = [
+    [-620, -360, 0, 980, 0],
+    [-470, -360, 0, 980, 0],
+    [-320, -360, 0, 980, 0],
+    [-170, -360, 0, 990, 0],
+    [180, -312, 120, 1010, 12],
+    [482, -196, 480, 1040, 50],
+    [650, -12, 980, 1080, 96],
+    [612, 236, 1480, 1100, 146],
+    [348, 512, 1840, 1120, 196],
+    [-72, 790, 1980, 1120, 232],
+    [-492, 1042, 1840, 1120, 214],
+    [-756, 1236, 1480, 1100, 166],
+    [-824, 1312, 1220, 1090, 136],
+    [-794, 1368, 980, 1080, 104],
+    [-716, 1410, 720, 1070, 72],
+    [-626, 1432, 480, 1060, 42],
+    [-324, 1410, 120, 1030, 4],
+    [38, 1260, 0, 1000, -22],
+    [360, 1048, 220, 1020, -68],
+    [560, 756, 680, 1060, -128],
+    [542, 428, 1160, 1080, -184],
+    [286, 184, 1420, 1100, -226],
+    [-82, 166, 1280, 1100, -232],
+    [-394, 390, 920, 1080, -178],
+    [-520, 732, 520, 1060, -108],
+    [-700, 980, 380, 1040, -38],
+    [-980, 1018, 620, 1040, 48],
+    [-1198, 812, 1040, 1060, 130],
+    [-1268, 462, 1220, 1080, 202],
+    [-1130, 128, 980, 1060, 224],
+    [-1316, -80, 620, 1040, 158],
+    [-1542, -146, 260, 1020, 72],
+    [-1662, -210, 110, 1010, 38],
+    [-1616, -292, 30, 1000, 18],
+    [-1482, -342, 0, 990, 8],
+    [-1320, -346, 0, 980, 2],
+    [-1240, -360, 0, 980, 0],
+    [-1085, -360, 0, 980, 0],
+    [-930, -360, 0, 980, 0],
+    [-775, -360, 0, 980, 0],
+  ] as const
+
+  return values.map(([x, y, z, width, bank]) => ({
+    x: x * scale,
+    y: y * scale,
+    z: z * heightScale,
+    width,
+    bank,
+  }))
+}
+
 export const SOURCE_TRACK_SPECS: SourceTrackSpec[] = [
   {
     id: 'tutorial-circuit',
@@ -89,10 +157,10 @@ export const SOURCE_TRACK_SPECS: SourceTrackSpec[] = [
     subdivisions: 12,
     footprintMultiplier: 1,
     heightMultiplier: 1,
-    widthMultiplier: 3,
+    widthMultiplier: 2.35,
     bankMultiplier: 1,
     allowInvertedFrame: false,
-    maxWidth: 4300,
+    maxWidth: 2700,
     nodes: makeTutorialCircuitNodes(),
   },
   {
@@ -102,10 +170,10 @@ export const SOURCE_TRACK_SPECS: SourceTrackSpec[] = [
     subdivisions: 12,
     footprintMultiplier: 1,
     heightMultiplier: 1,
-    widthMultiplier: 3,
+    widthMultiplier: 2.35,
     bankMultiplier: 1,
     allowInvertedFrame: false,
-    maxWidth: 4300,
+    maxWidth: 2700,
     nodes: makeTutorialCircuitNodes(),
   },
   {
@@ -115,7 +183,7 @@ export const SOURCE_TRACK_SPECS: SourceTrackSpec[] = [
     subdivisions: 8,
     footprintMultiplier: 1.14,
     heightMultiplier: 0,
-    widthMultiplier: 2.45,
+    widthMultiplier: 2.18,
     bankMultiplier: 0,
     allowInvertedFrame: false,
     maxWidth: 1900,
@@ -180,7 +248,7 @@ export const SOURCE_TRACK_SPECS: SourceTrackSpec[] = [
     widthMultiplier: 2.45,
     bankMultiplier: 1,
     allowInvertedFrame: false,
-    maxWidth: 2150,
+    maxWidth: 2000,
     nodes: [
       { x: -4573.68, y: -3766.56, z: 0, width: 900, bank: 0 },
       { x: 0, y: -3766.56, z: 0, width: 900, bank: 0 },
@@ -205,10 +273,10 @@ export const SOURCE_TRACK_SPECS: SourceTrackSpec[] = [
     subdivisions: 24,
     footprintMultiplier: 1.14,
     heightMultiplier: 0,
-    widthMultiplier: 2.45,
+    widthMultiplier: 2.12,
     bankMultiplier: 1,
     allowInvertedFrame: false,
-    maxWidth: 2250,
+    maxWidth: 2050,
     nodes: [
       { x: -3306, y: -4297.8, z: 0, width: 940, bank: 0 },
       { x: 3306, y: -4297.8, z: 0, width: 940, bank: 0 },
@@ -232,10 +300,10 @@ export const SOURCE_TRACK_SPECS: SourceTrackSpec[] = [
     subdivisions: 32,
     footprintMultiplier: 1.14,
     heightMultiplier: 0,
-    widthMultiplier: 2.45,
+    widthMultiplier: 2.08,
     bankMultiplier: 1,
     allowInvertedFrame: false,
-    maxWidth: 2350,
+    maxWidth: 2100,
     nodes: [
       { x: -6942.6, y: -4628.4, z: 0, width: 1000, bank: 0 },
       { x: 0, y: -4628.4, z: 0, width: 1000, bank: 0 },
@@ -265,10 +333,10 @@ export const SOURCE_TRACK_SPECS: SourceTrackSpec[] = [
     subdivisions: 32,
     footprintMultiplier: 1.14,
     heightMultiplier: 1,
-    widthMultiplier: 2.45,
+    widthMultiplier: 2.12,
     bankMultiplier: 1,
     allowInvertedFrame: false,
-    maxWidth: 2500,
+    maxWidth: 2250,
     nodes: [
       { x: -13224, y: -5950.8, z: 0, width: 1040, bank: 0 },
       { x: -6612, y: -5950.8, z: 0, width: 1040, bank: 0 },
@@ -299,10 +367,10 @@ export const SOURCE_TRACK_SPECS: SourceTrackSpec[] = [
     subdivisions: 32,
     footprintMultiplier: 1.14,
     heightMultiplier: 1,
-    widthMultiplier: 2.45,
+    widthMultiplier: 2.1,
     bankMultiplier: 1,
     allowInvertedFrame: false,
-    maxWidth: 2600,
+    maxWidth: 2300,
     nodes: [
       { x: -26163, y: -31549.5, z: 0, width: 1060, bank: 0 },
       { x: -14620.5, y: -31549.5, z: 0, width: 1060, bank: 0 },
@@ -333,10 +401,10 @@ export const SOURCE_TRACK_SPECS: SourceTrackSpec[] = [
     subdivisions: 32,
     footprintMultiplier: 1.14,
     heightMultiplier: 1,
-    widthMultiplier: 2.45,
+    widthMultiplier: 2.08,
     bankMultiplier: 1,
     allowInvertedFrame: true,
-    maxWidth: 2550,
+    maxWidth: 2250,
     nodes: [
       { x: -26163, y: -31549.5, z: 0, width: 1040, bank: 0 },
       { x: -14620.5, y: -31549.5, z: 0, width: 1040, bank: 0 },
@@ -367,10 +435,10 @@ export const SOURCE_TRACK_SPECS: SourceTrackSpec[] = [
     subdivisions: 32,
     footprintMultiplier: 1.14,
     heightMultiplier: 1,
-    widthMultiplier: 2.45,
+    widthMultiplier: 2.1,
     bankMultiplier: 1,
     allowInvertedFrame: true,
-    maxWidth: 2580,
+    maxWidth: 2300,
     nodes: [
       { x: -29241, y: -33088.5, z: 0, width: 1060, bank: 0 },
       { x: -17236.8, y: -33088.5, z: 0, width: 1060, bank: 0 },
@@ -401,10 +469,10 @@ export const SOURCE_TRACK_SPECS: SourceTrackSpec[] = [
     subdivisions: 32,
     footprintMultiplier: 1.14,
     heightMultiplier: 1,
-    widthMultiplier: 2.45,
+    widthMultiplier: 2.08,
     bankMultiplier: 1,
     allowInvertedFrame: true,
-    maxWidth: 2700,
+    maxWidth: 2350,
     nodes: [
       { x: -39580.8, y: -24031.2, z: 0, width: 980, bank: 0 },
       { x: -28978.8, y: -24031.2, z: 0, width: 980, bank: 0 },
@@ -445,10 +513,23 @@ export const SOURCE_TRACK_SPECS: SourceTrackSpec[] = [
     subdivisions: 32,
     footprintMultiplier: 1.02,
     heightMultiplier: 1,
-    widthMultiplier: 2.65,
+    widthMultiplier: 2.16,
     bankMultiplier: 1,
     allowInvertedFrame: true,
-    maxWidth: 2850,
+    maxWidth: 2380,
     nodes: makeVortexGauntletNodes(),
+  },
+  {
+    id: 'neon-blender',
+    name: 'Neon Blender',
+    description: 'Unhinged stunt blender with a launch chicane, double looping, corkscrew wallride, and drop finish.',
+    subdivisions: 40,
+    footprintMultiplier: 1.04,
+    heightMultiplier: 1,
+    widthMultiplier: 2.08,
+    bankMultiplier: 1,
+    allowInvertedFrame: true,
+    maxWidth: 2380,
+    nodes: makeNeonBlenderNodes(),
   },
 ]

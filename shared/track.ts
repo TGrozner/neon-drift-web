@@ -27,6 +27,7 @@ export type TrackId =
   | 'corkscrew-relay'
   | 'looping-inferno'
   | 'vortex-gauntlet'
+  | 'neon-blender'
 
 export type TrackProfile = {
   center: Vec3
@@ -99,6 +100,7 @@ const STUNT_TRACKS = new Set<TrackId>([
   'corkscrew-relay',
   'looping-inferno',
   'vortex-gauntlet',
+  'neon-blender',
 ])
 
 const nodeAt = (nodes: SourceTrackNode[], index: number): SourceTrackNode => {
@@ -264,13 +266,30 @@ const interpolateSample = (
 
 const makeGates = (track: Pick<RaceTrack, 'totalLength' | 'sample'>): TrackGate[] =>
   Array.from({ length: gateCount }, (_, index) => {
-    const distance = (track.totalLength * index) / gateCount
+    const fractions = gateFractionsFor(track as RaceTrack)
+    const distance = track.totalLength * (fractions[index] ?? index / gateCount)
+    const profile = track.sample(distance)
+    const pressure = gatePressureFor(track as RaceTrack, index)
     return {
       index,
       distance,
-      halfWidth: track.sample(distance).width * 0.5 + 0.92,
+      halfWidth: profile.width * pressure + 0.42,
     }
   })
+
+const gateFractionsFor = (track: RaceTrack): number[] => {
+  if (isSimpleTrainingGeometryTrack(track.id)) return [0, 0.12, 0.25, 0.38, 0.5, 0.62, 0.75, 0.88]
+  if (STUNT_TRACKS.has(track.id)) return [0, 0.08, 0.2, 0.34, 0.48, 0.62, 0.76, 0.9]
+  if (track.id === 'banked-speedway') return [0, 0.1, 0.23, 0.36, 0.5, 0.64, 0.77, 0.9]
+  return [0, 0.09, 0.22, 0.36, 0.5, 0.63, 0.77, 0.9]
+}
+
+const gatePressureFor = (track: RaceTrack, index: number): number => {
+  if (index === 0) return 0.46
+  if (STUNT_TRACKS.has(track.id)) return index % 2 === 0 ? 0.31 : 0.34
+  if (isSimpleTrainingGeometryTrack(track.id)) return index % 2 === 0 ? 0.36 : 0.39
+  return index % 2 === 0 ? 0.33 : 0.36
+}
 
 const makeStartGrid = (trackId: TrackId): StartGridSlot[] => {
   if (isSimpleTrainingGeometryTrack(trackId)) {
@@ -327,26 +346,26 @@ const rechargePadFractionsFor = (id: TrackId): number[] => {
 
 const speedPadLaneScaleFor = (track: RaceTrack, index: number, fraction: number): number => {
   if (track.id !== 'banked-speedway' && !STUNT_TRACKS.has(track.id)) {
-    return index % 3 === 1 ? -0.18 : index % 3 === 2 ? 0.18 : 0
+    return index % 3 === 1 ? -0.34 : index % 3 === 2 ? 0.34 : index % 2 === 0 ? 0.18 : -0.18
   }
 
-  const inside = insideTurnLaneScale(track, fraction, 0.22)
+  const inside = insideTurnLaneScale(track, fraction, 0.36)
   if (Math.abs(inside) > 0.01) return inside
-  return index % 2 === 0 ? 0 : index % 4 === 1 ? -0.13 : 0.13
+  return index % 2 === 0 ? 0.22 : index % 4 === 1 ? -0.32 : 0.32
 }
 
 const rechargePadLaneScaleFor = (track: RaceTrack, index: number, fraction: number): number => {
-  if (track.id !== 'banked-speedway' && !STUNT_TRACKS.has(track.id)) return index % 2 === 0 ? -0.28 : 0.28
+  if (track.id !== 'banked-speedway' && !STUNT_TRACKS.has(track.id)) return index % 2 === 0 ? -0.4 : 0.4
 
-  const inside = insideTurnLaneScale(track, fraction, 0.3)
-  if (Math.abs(inside) > 0.01) return inside
-  return index % 2 === 0 ? -0.24 : 0.24
+  const inside = insideTurnLaneScale(track, fraction, 0.42)
+  if (Math.abs(inside) > 0.01) return -inside
+  return index % 2 === 0 ? -0.38 : 0.38
 }
 
 const makePads = (track: RaceTrack): TrackPad[] => {
   const speedHalfLength = SOURCE_SPEED_PAD_LENGTH * 0.5 * WORLD_SCALE
   const referenceWidth = track.width
-  const halfWidth = referenceWidth * 0.09
+  const halfWidth = referenceWidth * 0.058
   const speedPads: TrackPad[] = speedPadFractionsFor(track.id).map((fraction, index) => {
     const distance = track.totalLength * fraction
     const profile = track.sample(distance)

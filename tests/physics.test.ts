@@ -51,7 +51,7 @@ const bankedDistance = (): number => {
 }
 
 describe('ship physics', () => {
-  it('reaches s&box-scale straight-line speed instead of crawling', () => {
+  it('reaches the new nervous straight-line speed instead of crawling', () => {
     const track = trackById('banked-speedway')
     const vehicle = createVehicle('ship', 'Ship', 'balanced', true, 20, 0)
     for (let i = 0; i < 120; i += 1) {
@@ -64,7 +64,7 @@ describe('ship physics', () => {
       })
     }
 
-    expect(vehicle.forwardSpeed).toBeGreaterThan(68)
+    expect(vehicle.forwardSpeed).toBeGreaterThan(100)
     expect(vehicle.forwardSpeed).toBeLessThan(SHIP_PROFILES.balanced.maxSpeed)
   })
 
@@ -96,25 +96,37 @@ describe('ship physics', () => {
     expect(Math.abs(vehicle.yawOffset)).toBeGreaterThan(committedYaw * 0.9)
   })
 
-  it('keeps sustained full-lock steering from snapping into the rail', () => {
+  it('makes high-speed full-lock steering dangerous without airbrake control', () => {
     const track = trackById('tutorial-circuit')
-    const vehicle = createVehicle('ship', 'Ship', 'balanced', true, 20, 0)
-    vehicle.forwardSpeed = SHIP_PROFILES.balanced.maxSpeed * 0.64
+    const noAirbrake = createVehicle('no-airbrake', 'No Airbrake', 'balanced', true, 20, 0)
+    const airbrake = createVehicle('airbrake', 'Airbrake', 'balanced', true, 20, 0)
+    noAirbrake.forwardSpeed = SHIP_PROFILES.balanced.maxSpeed * 0.92
+    airbrake.forwardSpeed = SHIP_PROFILES.balanced.maxSpeed * 0.92
 
-    for (let i = 0; i < 54; i += 1) {
-      stepVehicle(vehicle, {
+    let peakNoAirbrakePressure = 0
+    let peakAirbrakePressure = 0
+    for (let i = 0; i < 120; i += 1) {
+      stepVehicle(noAirbrake, {
         track,
         input: { ...EMPTY_INPUT, throttle: 1, steer: 1 },
         dt: 1 / 60,
         slipstream: noSlipstream,
         nearbyVehicles: 0,
       })
+      stepVehicle(airbrake, {
+        track,
+        input: { ...EMPTY_INPUT, throttle: 1, steer: 0.55, airbrake: true },
+        dt: 1 / 60,
+        slipstream: noSlipstream,
+        nearbyVehicles: 0,
+      })
+      peakNoAirbrakePressure = Math.max(peakNoAirbrakePressure, noAirbrake.telemetry.railPressure)
+      peakAirbrakePressure = Math.max(peakAirbrakePressure, airbrake.telemetry.railPressure)
     }
 
-    expect(Math.abs(vehicle.yawOffset)).toBeLessThan(1.05)
-    expect(vehicle.telemetry.offTrack).toBe(false)
-    expect(Math.abs(vehicle.lane)).toBeGreaterThan(track.sample(vehicle.distance).width * 0.18)
-    expect(Math.abs(vehicle.lane)).toBeLessThan(track.sample(vehicle.distance).width * 0.48)
+    expect(peakNoAirbrakePressure).toBeGreaterThan(0.03)
+    expect(peakAirbrakePressure).toBeLessThan(peakNoAirbrakePressure)
+    expect(airbrake.forwardSpeed).toBeLessThan(noAirbrake.forwardSpeed)
   })
 
   it('caps combined planar speed instead of only forward speed', () => {
@@ -677,8 +689,8 @@ describe('ship physics', () => {
       })
     }
 
-    expect(vehicle.integrity).toBeGreaterThan(0.42)
-    expect(vehicle.integrity).toBeLessThan(0.92)
+    expect(vehicle.integrity).toBeGreaterThan(0.18)
+    expect(vehicle.integrity).toBeLessThan(0.78)
     expect(vehicle.eliminated).toBe(false)
   })
 

@@ -17,7 +17,7 @@ import './App.css'
 function App() {
   const { race, raceRef, start, menu, setTouch, reset, version } = useNeonGame()
   const [selectedProfile, setSelectedProfile] = useState<ShipProfileId>('balanced')
-  const [selectedTrack, setSelectedTrack] = useState<TrackId>('tutorial-circuit')
+  const [selectedTrack, setSelectedTrack] = useState<TrackId>('vortex-gauntlet')
   const audio = useNeonAudio(race)
   const tutorialTrackId = race.phase === 'menu' ? selectedTrack : race.track.id
   const touchControlsActive = race.phase === 'warmup' || race.phase === 'countdown' || race.phase === 'racing'

@@ -134,11 +134,14 @@ const focusRace = async (page: Page) => {
 }
 
 const startRaceFromMenu = async (page: Page) => {
-  const next = page.getByTestId('mobile-menu-next')
-  for (let step = 0; step < 2 && await next.isVisible(); step += 1) {
-    await next.click()
+  if (await page.getByTestId('mobile-menu-flow').isVisible()) {
+    await page.locator('.mobile-menu-tab').filter({ hasText: 'Ready' }).click()
   }
   await page.getByTestId('start-race').click()
+}
+
+const selectTutorialTrack = async (page: Page) => {
+  await page.getByRole('button', { name: /Tutorial Circuit/ }).click()
 }
 
 const releaseTouchControlIfPresent = async (
@@ -267,6 +270,7 @@ const elementsHaveNoVisibleOverlap = async (
   )
 
 test('lays out the menu choices without overlap', async ({ page }) => {
+  test.setTimeout(90_000)
   for (const viewport of [
     { width: 1440, height: 900 },
     { width: 390, height: 844 },
@@ -281,9 +285,9 @@ test('lays out the menu choices without overlap', async ({ page }) => {
       await expect(page.getByTestId('mobile-menu-flow')).toBeVisible()
       await expect(page.getByTestId('mobile-menu-step-track')).toBeVisible()
       await expect(page.getByTestId('start-race')).toHaveCount(0)
-      await page.getByTestId('mobile-menu-next').click()
+      await page.locator('.mobile-menu-tab').filter({ hasText: 'Ship' }).click()
       await expect(page.getByTestId('mobile-menu-step-ship')).toBeVisible()
-      await page.getByTestId('mobile-menu-next').click()
+      await page.locator('.mobile-menu-tab').filter({ hasText: 'Ready' }).click()
       await expect(page.getByTestId('mobile-menu-step-ready')).toBeVisible()
       await expect(page.getByTestId('start-race')).toBeInViewport()
       await expect.poll(async () => page.locator('.menu-panel').evaluate((element) =>
@@ -300,8 +304,8 @@ test('keeps mobile setup and touch controls active in landscape', async ({ page 
   await expect(page.getByTestId('mobile-menu-flow')).toBeVisible()
   await expect(page.getByTestId('mobile-menu-step-track')).toBeVisible()
   await expect(page.getByTestId('start-race')).toHaveCount(0)
-  await page.getByTestId('mobile-menu-next').click()
-  await page.getByTestId('mobile-menu-next').click()
+  await selectTutorialTrack(page)
+  await page.locator('.mobile-menu-tab').filter({ hasText: 'Ready' }).click()
   await expect(page.getByTestId('start-race')).toBeInViewport()
   await startRaceFromMenu(page)
 
@@ -364,17 +368,19 @@ test('accepts spaces in feedback textarea under game input listener', async ({ p
 
 test('exposes source-authored tracks except Neon Oval as playable tracks', async ({ page }) => {
   await goToGame(page)
-  await expect(page.locator('.menu-meta')).toContainText('Tutorial Circuit')
-  await expect(page.locator('.track-option')).toHaveCount(11)
+  await expect(page.locator('.menu-meta')).toContainText('Vortex Gauntlet')
+  await expect(page.locator('.track-option')).toHaveCount(12)
   await expect(page.getByRole('button', { name: /Tutorial Circuit/ })).toBeVisible()
   await expect(page.getByRole('button', { name: /Debug Circuit/ })).toBeVisible()
   await expect(page.getByRole('button', { name: /Inversion Ribbon/ })).toBeVisible()
   await expect(page.getByRole('button', { name: /Vortex Gauntlet/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Neon Blender/ })).toBeVisible()
   await expect(page.getByRole('button', { name: /Neon Oval/ })).toHaveCount(0)
 })
 
 test('replays the tutorial on the dedicated tutorial circuit', async ({ page }) => {
   await goToGame(page)
+  await selectTutorialTrack(page)
   await expect(page.locator('.menu-meta')).toContainText('Tutorial Circuit')
   await expect(page.locator('.track-option.selected .track-tag')).toContainText('Training')
   await expect(page.getByTestId('tutorial')).toContainText('Pick a session')
@@ -384,7 +390,6 @@ test('replays the tutorial on the dedicated tutorial circuit', async ({ page }) 
   await expect(page.getByTestId('tutorial')).toContainText('2/9')
   await focusRace(page)
   await holdThrottle(page)
-  await page.waitForTimeout(4200)
   await expectMoving(page)
   await page.getByRole('button', { name: 'OK' }).click()
   await focusRace(page)
@@ -420,6 +425,7 @@ test('drives with simplified mobile touch controls', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await installVibrationSpy(page)
   await goToGame(page)
+  await selectTutorialTrack(page)
   await startRaceFromMenu(page)
   await page.keyboard.press('F1')
   await expect(page.getByTestId('tutorial')).toBeHidden()
@@ -471,7 +477,7 @@ test('drives with simplified mobile touch controls', async ({ page }) => {
   await expect.poll(async () => (await vibrationEvents(page)).some((pattern) => pattern === 12)).toBe(true)
 
   const turnRightReleased = await releaseTouchControlIfPresent(turnRight, 7)
-  if (turnRightReleased) await expect(turnRight).toHaveAttribute('aria-pressed', 'false')
+  if (turnRightReleased && await turnRight.isVisible()) await expect(turnRight).toHaveAttribute('aria-pressed', 'false')
   await expect.poll(async () => (await touchInputState(page)).touchSteer ?? 0).toBe(0)
   await page.waitForTimeout(1_350)
   await expect.poll(async () => (await touchInputState(page)).touchBoost ?? true).toBe(false)
@@ -482,6 +488,7 @@ test('shows mobile-specific tutorial copy', async ({ page }) => {
   await goToGame(page, { tutorialComplete: false })
   await expect(page.getByTestId('mobile-menu-flow')).toBeVisible()
   await expect(page.getByTestId('tutorial')).toHaveCount(0)
+  await selectTutorialTrack(page)
   await startRaceFromMenu(page)
   await expect(page.getByTestId('tutorial')).toBeVisible()
   await expect(page.getByTestId('tutorial')).toContainText('Auto-throttle')
@@ -635,15 +642,15 @@ test('starts a playable 3D race and renders canvas pixels', async ({ page }) => 
     gateParts: 24,
     pads: 8,
     startLine: 1,
-    slabs: 768,
-    rails: 1536,
+    slabs: 1920,
+    rails: 3840,
   })
 })
 
 test('starts a playable source-authored stunt track', async ({ page }) => {
   await goToGame(page)
-  await page.getByRole('button', { name: /Inversion Ribbon/ }).click()
-  await expect(page.locator('.menu-meta')).toContainText('Inversion Ribbon')
+  await page.getByRole('button', { name: /Neon Blender/ }).click()
+  await expect(page.locator('.menu-meta')).toContainText('Neon Blender')
   await startRaceFromMenu(page)
   await focusRace(page)
   await holdThrottle(page)
@@ -685,8 +692,8 @@ test('starts a playable source-authored stunt track', async ({ page }) => {
     }
   }), { timeout: 15_000 }).toEqual({
     loaded: true,
-    slabs: 1280,
-    rails: 2560,
+    slabs: 3200,
+    rails: 6400,
   })
   await releaseThrottle(page)
 })
